@@ -21,7 +21,7 @@ A detail must come from the report. Never infer a side, stage or cause the repor
 
 A detail documented for a different condition belongs to that condition, not this one.
 
-The same detail stated differently in two places is reported with both phrases and noted as a conflict.
+The same detail stated differently in two places is reported once for each statement, each with its own phrase, so the coder sees both.
 
 Information that identifies the patient as a person is never copied.
 

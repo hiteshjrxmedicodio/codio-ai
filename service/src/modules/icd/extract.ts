@@ -38,11 +38,18 @@ const QUOTE = {
   required: ["section", "text"],
 };
 
-/** Step 1: every diagnosis the report documents, with the exact phrases that state it. */
-export async function extractDiagnoses(blocks: Block[]): Promise<{ diagnoses: Diagnosis[]; usage: Usage }> {
+/**
+ * Step 1: every diagnosis the report documents, with the exact phrases that state it. With a
+ * CDI-cleaned copy, the model reads the cleaned report and quotes the original, because the
+ * quotes are found and highlighted on the page.
+ */
+export async function extractDiagnoses(blocks: Block[], cleaned?: Block[]): Promise<{ diagnoses: Diagnosis[]; usage: Usage }> {
+  const original = reportText(blocks);
+  const read = cleaned ? reportText(cleaned) : original;
+  const text = read === original ? `ORIGINAL REPORT\n${original}` : `CLEANED REPORT\n${read}\n\nORIGINAL REPORT\n${original}`;
   const { data, usage } = await callBlock<{ diagnoses: Diagnosis[] }>({
     blockId: "P-DX-EXTRACT",
-    parts: [{ text: `REPORT\n${reportText(blocks)}` }],
+    parts: [{ text }],
     schema: {
       type: "object",
       properties: {

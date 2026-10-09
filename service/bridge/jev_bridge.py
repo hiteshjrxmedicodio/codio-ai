@@ -22,17 +22,22 @@ def main():
 
     import run_icd_walk as R
     import run_icd_system_walk as S
-    from run_icd_direct_walk import q_categories_direct
-    from icd_evidence_walk import walk, RecoveryConfig
-    from icd_retrieval import get_index
+    import run_icd_direct_walk as D
+    try:  # newer engine: index retrieval, then the evidence walk with recovery
+        from icd_evidence_walk import walk, RecoveryConfig
+        from icd_retrieval import get_index
+    except ImportError:  # engine package without them (service/engine): system -> category -> entry walk only
+        walk = RecoveryConfig = get_index = None
 
     # Same defaults as the engine's CLI: Excludes1/2 links and index see/see-also; custom links on hold.
     S.POINTERS = None
     S.KNOWLEDGE = None
     S.LINKS = json.load(open(os.path.join(a.jev, 'inputs', 'excludes_links.json')))
     S.SEE_LINKS = json.load(open(os.path.join(a.jev, 'inputs', 'see_links.json')))
-    get_index()
-    config = RecoveryConfig(max_questions=None, retrieval_limit=int(req.get('retrieval_limit', 8)))
+    config = None
+    if walk:
+        get_index()
+        config = RecoveryConfig(max_questions=None, retrieval_limit=int(req.get('retrieval_limit', 8)))
 
     provider = req.get('provider', 'decisions')
     if provider == 'decisions':
@@ -41,7 +46,7 @@ def main():
             print(json.dumps({'error': 'OPENAI_API_KEY is not set'}))
             return
         from decisions_adapter import install
-        install(R, key, req.get('decisions_model') or 'gpt-6-luna')
+        install(R, key, req.get('decisions_model') or 'gpt-6-luna', req.get('decisions_url') or 'https://api.openai.com/v1/decisions')
     else:
         key = os.environ.get('TYPESAFE_API_KEY')
         if not key and not dry:
@@ -49,8 +54,11 @@ def main():
             return
     gemini = None
     if req.get('gemini') and not dry and os.environ.get('GEMINI_API_KEY'):
-        from icd_gemini_fallback import GeminiClient, fallback
-        gemini = (GeminiClient(os.environ['GEMINI_API_KEY'], req.get('gemini_model') or 'gemini-2.5-flash'), fallback)
+        try:
+            from icd_gemini_fallback import GeminiClient, fallback
+            gemini = (GeminiClient(os.environ['GEMINI_API_KEY'], req.get('gemini_model') or 'gemini-2.5-flash'), fallback)
+        except ImportError:  # not in every engine package; walks that end without a code stay uncoded
+            gemini = None
 
     def describe(code):
         if not code:
@@ -98,7 +106,9 @@ def main():
 
     def run(u):
         try:
-            r = walk(u, key, dry, 20, q_categories_direct, config)
+            r = walk(u, key, dry, 20, D.q_categories_direct, config) if walk else D.walk(u, key, dry, 20)
+            if not r.get('code') and not r.get('handoff') and r.get('escalate'):
+                r['handoff'] = {'required': True, 'reason': 'The engine stopped at ' + ', '.join(map(str, r['escalate'])), 'candidate_codes': []}
             if gemini and not r.get('code'):
                 r = gemini[1](u, r, gemini[0])
             code = r.get('code')

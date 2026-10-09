@@ -116,6 +116,26 @@ pick-one questions are answered by the **OpenAI Decisions API** (`bridge/decisio
 Everything sent is redacted first. History, ruled-out and uncertain diagnoses are listed but not coded. Each result carries
 `trail` (the engine's path, grouped for display) so the companion can show how the code was reached.
 
+**Report run.** On an allowed report the companion makes one call, `POST /v1/codes/run`
+(`modules/codes/run.ts`): **CDI** (`P-CDI-NORMALIZE`, ported from the Codio engine's cleaning + CDI step: typos,
+abbreviations, numbers, administrative noise and run-on diagnoses, never a change in meaning; a failure passes the
+original report on) → then side by side **diagnosis extraction → ICD-10-CM** and **procedure extraction → CPT**,
+both reading the cleaned report. Diagnosis quotes are still copied from the original so they highlight on the page.
+The documentation review (P-CON/AMB/INC/WRD) stays one click away. ICD coding runs the engine in `service/engine/jev_icd_engine`
+(`icd_pipeline.jev_path`, relative to `service/`): engine code and CMS FY2026 tabular, index and Excludes/see links
+only. The package's `inputs/gastro/` and `results/` hold production charts (PHI) and are never copied or committed
+(`.gitignore`). This engine version has no index retrieval or Gemini fallback; the bridge uses its
+system → category → entry walk, and a walk that stops early returns the stopping point as the review reason.
+
+**CPT pipeline.** Runs alongside ICD on an allowed report and fills the CPT prediction card. Ported from the Codio
+engine's procedure extraction (P022) and final selection (P023, Pinecone path). Procedure extraction
+(`P-PROC-EXTRACT`: completion status complete / attempted / mixed / no procedure, each procedure paired with its
+parent) → candidate CPT codes per procedure from Pinecone (OpenAI embedding, dedupe by code, dense + BM25 rerank;
+procedures whose best match is under `rag.score_threshold` are listed, not coded) → one code per procedure
+(`P-CPT-SELECT`, Gemini by default; `select_provider: openai_decisions` asks the Decisions API with Gemini as fallback, but it picked through-stoma codes on near-tied candidates in testing) → dedup and confidence gate. A discontinued
+procedure gets `-53`. `POST /v1/cpt/predict`, configured under `cpt_pipeline`; needs `PINECONE_API_KEY` in
+`service/.env`. Not ported: HCPCS extraction, add-on codes, NCCI and other modifiers.
+
 ## How it works, in one paragraph
 
 Every time the tab changes, the extension reads the page text and asks the **privacy gate**

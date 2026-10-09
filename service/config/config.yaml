@@ -31,6 +31,9 @@ blocks:
   P-DX-PARAMS:   { prompt: coding/p_dx_params.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 2048,  enabled: true }
   P-ICD-CODE:    { prompt: coding/p_icd_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
   P-CPT-CODE:    { prompt: coding/p_cpt_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  P-CDI-NORMALIZE: { prompt: coding/p_cdi_normalize.txt,  model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 32768, enabled: true }
+  P-PROC-EXTRACT: { prompt: coding/p_proc_extract.txt,     model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 8192,  enabled: true }
+  P-CPT-SELECT:  { prompt: coding/p_cpt_select.txt,        model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 8192,  enabled: true }
   P-READ-FILE:   { prompt: reading/p_read_file.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 32768, enabled: true }
   P-READ-MAP:    { prompt: reading/p_read_section_map.txt, model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 16384, enabled: true }
   P-CON:  { prompt: cdi/p_con_contradictions.txt, model: gemini-3.8-flash, thinking: medium, temperature: 0, max_output_tokens: 8192, enabled: true }
@@ -168,7 +171,7 @@ companion:
 icd_pipeline:
   provider: decisions
   decisions_model: gpt-6-luna
-  jev_path: /Users/hiteshshanthakumar/Desktop/jev_icd_engine
+  jev_path: engine/jev_icd_engine   # relative to service/; CMS FY2026 tables, no chart data
   python: python3
   workers: 6
   retrieval_limit: 8
@@ -177,6 +180,33 @@ icd_pipeline:
   timeout_ms: 300000
   include_statuses: [current]       # which extracted statuses go on to coding
   param_concurrency: 6
+
+# Report → procedures (with completion status) → CPT candidates per procedure from Pinecone
+# (OpenAI embedding, optional dense + BM25 rerank) → one code per procedure. Ported from the
+# Codio engine's procedure extraction (P022) and final selection (P023, Pinecone path).
+# P-CPT-SELECT is the instructions for the Decisions API and for the Gemini fallback alike.
+cpt_pipeline:
+  # gemini: on near-identical candidates (colonoscopy vs colonoscopy through stoma, dense 0.822 vs 0.815) the
+  # Decisions API chose the stoma code 3/3 at up to 0.99; Gemini chose correctly 3/3 with a cited rationale.
+  select_provider: gemini   # openai_decisions | gemini
+  attempted_modifier: "-53"           # stamped on a discontinued procedure's code; exempt from the gate
+  gate_threshold: 0.6                 # selections below this confidence are dropped; 0 keeps all
+  report_max_chars: 12000             # report text sent with the selection as evidence
+  rag:
+    api_key_env: PINECONE_API_KEY
+    control_url: https://api.pinecone.io
+    api_version: "2025-04"
+    index_name: knowledge-base
+    namespace: cpt-data-nextgen
+    embedding_model: text-embedding-3-small
+    code_field: code_value
+    descriptor_fields: [description, short_description]
+    lowercase_query: false
+    top_k: 10                         # candidates sent to selection per procedure
+    score_threshold: 0.5              # a procedure whose best dense score is below this is not coded
+    concurrency: 10
+    timeout_ms: 30000
+    rerank: { enabled: true, dense_weight: 0.7, retrieve_k: 25, bm25_k1: 1.5, bm25_b: 0.75 }
 
 features:
   summary_only: true

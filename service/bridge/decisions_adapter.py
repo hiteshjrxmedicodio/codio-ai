@@ -14,8 +14,8 @@ def _instructions(q):
     return f"{q['context']}\n\nQUESTION: {q['statement']}\n\nRead the input fields in this order: {', '.join(read)}."
 
 
-def _post(body, key, retries=4):
-    req = urllib.request.Request(API, data=json.dumps(body).encode(), method='POST',
+def _post(body, key, url=API, retries=4):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method='POST',
                                  headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'})
     for i in range(retries):
         try:
@@ -35,7 +35,7 @@ def _post(body, key, retries=4):
     raise RuntimeError('Decisions API gave up')
 
 
-def install(R, key, model):
+def install(R, key, model, url=API):
     """Swap the engine's question function for one that asks the Decisions API."""
 
     def ask(state, q, _jev_key, dry):
@@ -48,7 +48,7 @@ def install(R, key, model):
             'questions': [{'type': 'choice', 'name': name, 'instructions': _instructions(q),
                            'choices': [{'value': k, 'description': str(v)} for k, v in q['options'].items()]}],
         }
-        out = _post(body, key)
+        out = _post(body, key, url)
         answer = next((a for a in out.get('answers', []) if a.get('name') == name), None) or {}
         tokens = (out.get('usage') or {}).get('input_tokens', 0)
         if answer.get('type') == 'refusal' or answer.get('choice') not in q['options']:

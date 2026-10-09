@@ -10,6 +10,11 @@ import { runScreenRead } from "../modules/reading/screenRead";
 import { runSectionMap } from "../modules/reading/sectionMap";
 import { structureTranscript } from "../modules/dictation/dictation";
 import { transcribeAndClean } from "../modules/voice/voice";
+import { extractProcedures } from "../modules/cpt/extract";
+import { predictCpt } from "../modules/cpt/pipeline";
+import { extractDiagnoses } from "../modules/icd/extract";
+import { normalizeReport } from "../modules/cdi/normalize/normalize";
+import { runCodes } from "../modules/codes/run";
 import { readChart, readImageBase64, readJson } from "./chartFile";
 
 /** Everything a single block run can take from the command line. */
@@ -32,6 +37,8 @@ function need<T>(value: T | undefined, flag: string): T {
   if (value === undefined) throw new Error(`This block needs ${flag}`);
   return value;
 }
+
+const blocksOf = (i: BlockInput) => sectionsOf(i).map((s) => ({ heading: s.name, text: s.text }));
 
 const chartText = (i: BlockInput) => sectionsOf(i).map((s) => `${s.name}\n${s.text}`).join("\n\n");
 
@@ -58,6 +65,12 @@ export const RUNNERS: Record<string, (input: BlockInput) => Promise<unknown>> = 
         blocks: sectionsOf(i).map((s) => ({ heading: s.name, text: s.text })),
       },
     }),
+  "P-PROC-EXTRACT": (i) => extractProcedures(blocksOf(i)),
+  // Selection needs retrieved candidates, so it runs as the whole pipeline.
+  "P-CPT-SELECT": (i) => predictCpt(blocksOf(i)),
+  "P-DX-EXTRACT": (i) => extractDiagnoses(blocksOf(i)),
+  "P-CDI-NORMALIZE": (i) => normalizeReport(blocksOf(i)),
+  "CODES-RUN": (i) => runCodes(blocksOf(i)),
   "CODE-SCREEN": async (i) => runCodeScreen(sectionsOf(i), i.setting ?? "unknown"),
   ANALYZE: (i) => analyzeNote(sectionsOf(i), i.setting ?? "unknown"),
 };

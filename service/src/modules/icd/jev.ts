@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { SERVICE_ROOT, getConfig } from "../../core/config";
 
 export interface JevUnit {
@@ -37,7 +38,12 @@ export interface JevTrail {
  * It runs as a Python child process through bridge/jev_bridge.py; the engine folder is never modified.
  */
 export function runJev(units: JevUnit[]): Promise<JevResult[]> {
-  const cfg = getConfig().icd_pipeline;
+  const icd = getConfig().icd_pipeline;
+  const cfg = { ...icd, jev_path: resolve(SERVICE_ROOT, icd.jev_path) };
+  // Without this check a missing engine surfaces as a Python import traceback.
+  if (!existsSync(join(cfg.jev_path, "run_icd_walk.py"))) {
+    return Promise.reject(new Error(`ICD engine not found at ${cfg.jev_path}. Set icd_pipeline.jev_path in service/config/config.yaml`));
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(cfg.python, [join(SERVICE_ROOT, "bridge", "jev_bridge.py"), "--jev", cfg.jev_path], {
       env: process.env,
@@ -70,6 +76,7 @@ export function runJev(units: JevUnit[]): Promise<JevResult[]> {
         units,
         provider: cfg.provider,
         decisions_model: cfg.decisions_model,
+        decisions_url: `${getConfig().openai.base_url}/decisions`,
         workers: cfg.workers,
         retrieval_limit: cfg.retrieval_limit,
         gemini: cfg.gemini_fallback,

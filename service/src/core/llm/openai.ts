@@ -88,6 +88,16 @@ export async function decideChoice(args: {
   return { choice: a.choice, confidence: a.confidence ?? 0 };
 }
 
+/** One embedding (POST /v1/embeddings) for retrieval. Identifiers are scrubbed first, like every model call. */
+export async function embed(text: string, model: string): Promise<number[]> {
+  const data = (await post("/embeddings", JSON.stringify({ model, input: redactText(text) }), { "content-type": "application/json" })) as {
+    data?: { embedding: number[] }[];
+  };
+  const vector = data.data?.[0]?.embedding;
+  if (!vector) throw new Error("OpenAI returned no embedding");
+  return vector;
+}
+
 /** Whisper speech-to-text (POST /v1/audio/transcriptions). */
 /** `prompt` tells Whisper what kind of speech to expect, which steadies clinical vocabulary. */
 export async function transcribe(audioBase64: string, mimeType: string, prompt?: string): Promise<string> {

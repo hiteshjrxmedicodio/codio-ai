@@ -72,6 +72,11 @@ export default defineBackground(() => {
         return post("/v1/cdi/fix", { suggestion: message.suggestion, sections: message.sections, setting: "unknown" });
       case "icd:predict":
         return post("/v1/icd/predict", { blocks: message.blocks });
+      case "codes:run":
+        // The report run: CDI, then diagnoses → ICD-10 and procedures → CPT.
+        return post("/v1/codes/run", { blocks: message.blocks });
+      case "cpt:predict":
+        return post("/v1/cpt/predict", { blocks: message.blocks });
       case "report:ask":
         return post("/v1/report/ask", { title: message.title, report: message.report, question: message.question, earlier: [] });
       case "ptt:start":

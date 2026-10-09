@@ -22,9 +22,9 @@ Read `README.md`, `docs/ARCHITECTURE.md` and `docs/PROMPT_STANDARD.md` before ch
 - **Privacy gate before reading.** Nothing from a page reaches a model until the gate says clinical;
   `modules/agent/observation.ts` enforces a closed gate again on the service side. Never weaken either.
 - **Patient identifiers never reach a model (HIPAA minimum necessary).** `core/privacy/redact.ts` scrubs every text
-  part in `callBlock`, `callWithTools` and `decide`, and every summary and answer on the way out. Only age,
+  part in `callBlock`, `callWithTools`, `decide` and `embed`, and every summary and answer on the way out. Only age,
   sex/gender and insurance payer/plan are kept. Label lists live in `config.yaml` → `privacy`. Never add a model call
-  that bypasses these three clients.
+  that bypasses these clients.
 - **Bounded decisions go to the Decisions API** (`core/llm/openai.ts`), each with a fallback. Use Gemini
   only where text must be generated.
 

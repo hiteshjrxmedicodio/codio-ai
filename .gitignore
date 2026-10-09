@@ -1,8 +1,14 @@
 node_modules/
 .env
+.env.*
+!.env.example
 service/data/
 extension/.output/
 extension/dist/
 extension/.wxt/
 *.log
 .DS_Store
+# The ICD engine package ships production charts in these folders; they never belong in git.
+service/engine/**/inputs/gastro/
+service/engine/**/results/
+service/engine/**/extraction_errors.json

@@ -16,10 +16,12 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-FIX | `cdi/p_fix_guidance.txt` | Say where a problem is and what kind of change resolves it, compliantly | `modules/cdi/fix/fix.ts` |
 | P-READ-SCREEN | `reading/p_read_screen.txt` | Transcribe visible note text exactly, under on-screen headings | `modules/reading/screenRead.ts` |
 | P-SUMMARIZE | `report/p_summarize_report.txt` | List every field in a complete report and summarise what each says | `modules/report/summarize.ts` |
+| P-CDI-NORMALIZE | `coding/p_cdi_normalize.txt` | Clean and normalise each report block without changing meaning (CDI, from the Codio engine's p001_2) | `modules/cdi/normalize/normalize.ts` |
 | P-DX-EXTRACT | `coding/p_dx_extract.txt` | List each diagnosis the report documents, with the exact phrases | `modules/icd/extract.ts` |
 | P-DX-PARAMS | `coding/p_dx_params.txt` | State the coding-relevant details documented for one diagnosis | `modules/icd/extract.ts` |
 | P-ICD-CODE | `coding/p_icd_code.txt` | Assign ICD-10-CM codes the highlighted text supports | `modules/selection/codeSelection.ts` |
 | P-CPT-CODE | `coding/p_cpt_code.txt` | Assign CPT codes the highlighted text supports | `modules/selection/codeSelection.ts` |
+| P-PROC-EXTRACT | `coding/p_proc_extract.txt` | Decide completion status and list each procedure performed, paired with its parent | `modules/cpt/extract.ts` |
 | P-READ-FILE | `reading/p_read_file.txt` | Transcribe an attached document's clinical text exactly, under its own headings | `modules/files/readFile.ts` |
 | P-READ-MAP | `reading/p_read_section_map.txt` | Assign captured text to the configured standard sections | `modules/reading/sectionMap.ts` |
 | P-VOICE-CLEAN | `voice/p_voice_clean.txt` | Turn a raw speech transcript into the message the provider meant | `modules/voice/voice.ts` |
@@ -32,6 +34,7 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-PAGE-CHECK | `page/p_page_check.txt` | Choice: what kind of page is this (privacy gate) | `modules/page/pageCheck.ts` |
 | P-GATE | `cdi/p_gate_criticality.txt` | Choice: is this finding critical, and why | `modules/cdi/gate/gate.ts` |
 | D-SCREEN-CON / AMB / INC / WRD | `decisions/p_screen_*.txt` | Probability: is the matching finder worth running | `modules/cdi/prescreen/prescreen.ts` |
+| P-CPT-SELECT | `coding/p_cpt_select.txt` | Choice per procedure: which retrieved CPT candidate matches it | `modules/cpt/select.ts` |
 | D-SELECT-KIND | `decisions/p_select_kind.txt` | Choice: is highlighted text a diagnosis, a procedure, both or neither | `modules/selection/codeSelection.ts` |
 | D-PICK-CONTROL | `decisions/p_pick_control.txt` | Choice: which visible control moves toward the goal | `modules/agent/pickControl.ts` |
 | D-PICK-SECTION | `decisions/p_pick_section.txt` | Choice: which dictated section belongs in the clicked field | `modules/dictation/dictation.ts` |

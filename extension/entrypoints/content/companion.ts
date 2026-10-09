@@ -12,6 +12,7 @@ import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
+import { readRun, type CptCard } from "./reportRun";
 
 export { consent };
 
@@ -23,6 +24,8 @@ interface Report {
   coverage: { reachedEnd: boolean; steps: number; method: string };
   /** Each diagnosis with the phrases that state it, its code and the trail to that code. */
   icd?: { diagnoses: CodedDiagnosis[]; engineError?: string };
+  /** The procedures' CPT codes from the same run. */
+  cpt?: CptCard;
   /** The documentation check, run when the provider asks for it from the ICD card. */
   checked: boolean;
   suggestions: card.Suggestion[];
@@ -266,6 +269,8 @@ function present(r: Report): void {
   marked = null;
   mark("icd");
   renderIcd();
+  const cpt = report.cpt;
+  if (cpt) show(cpt.error ? card.messageCard("CPT prediction", cpt.error) : card.predictionCard("cpt", cpt.codes), "cpt", false);
   if (report.checked) renderReview(false);
 }
 
@@ -296,10 +301,10 @@ async function readReport(reuse = false): Promise<void> {
       show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
     } else show(card.loadingCard("ICD-10 codes", "Finding each diagnosis and its code… this can take a minute."), "icd");
     const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
-    const r = await send<{ diagnoses?: CodedDiagnosis[]; engineError?: string; error?: string }>({ type: "icd:predict", blocks: page.blocks });
-    if (r.error || !r.diagnoses) throw new Error(r.error ?? "no diagnoses came back");
-    const icd = { diagnoses: r.diagnoses, engineError: r.engineError };
-    present({ title: document.title, blocks: page.blocks, coverage, icd, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
+    // One run: CDI cleans the report, then diagnoses → ICD-10 and procedures → CPT.
+    showPrediction("cpt", null);
+    const { icd, cpt } = readRun(await send({ type: "codes:run", blocks: page.blocks }));
+    present({ title: document.title, blocks: page.blocks, coverage, icd, cpt, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
     persist();
     if (pendingQuestion) {
       const q = pendingQuestion;
@@ -308,6 +313,7 @@ async function readReport(reuse = false): Promise<void> {
     }
   } catch (err) {
     show(card.messageCard("ICD-10 codes", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
+    dock.removeCard("cpt");
   }
 }
 

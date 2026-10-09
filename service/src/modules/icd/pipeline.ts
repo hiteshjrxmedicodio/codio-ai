@@ -36,22 +36,27 @@ function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit 
  * ICD-10-CM code per diagnosis from the Jev engine. Diagnoses whose status is not coded (history,
  * ruled out, uncertain by default) are returned without a code so the provider still sees them.
  */
-export async function predictIcd(raw: Block[]): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
+export async function predictIcd(raw: Block[], cleanedRaw?: Block[]): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
   const cfg = getConfig().icd_pipeline;
   const blocks = redactBlocks(raw);
+  // The CDI-cleaned report, when the report run made one: read for meaning, never quoted.
+  const cleaned = cleanedRaw ? redactBlocks(cleanedRaw) : blocks;
   const usage: Usage[] = [];
 
-  const { diagnoses, usage: u1 } = await extractDiagnoses(blocks);
+  const { diagnoses, usage: u1 } = await extractDiagnoses(blocks, cleaned);
   usage.push(u1);
   const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
 
+  const paramsErrors: (string | undefined)[] = [];
   const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
     if (!coded[i]) return null;
     try {
-      const r = await predictParameters(dx, blocks);
+      const r = await predictParameters(dx, cleaned);
       usage.push(r.usage);
       return r.params;
-    } catch {
+    } catch (err) {
+      // Coding goes on without the details, but the reason is kept for the review note.
+      paramsErrors[i] = `Coding details could not be read: ${err instanceof Error ? err.message : String(err)}`;
       return null;
     }
   });
@@ -71,7 +76,7 @@ export async function predictIcd(raw: Block[]): Promise<{ diagnoses: CodedDiagno
   return {
     diagnoses: diagnoses.map((dx, i) => {
       const r = byUid.get(`dx${i}`);
-      const reason = !coded[i] ? `Not coded: ${dx.status.replace("_", " ")}` : engineError ?? r?.error ?? r?.handoff?.reason ?? null;
+      const reason = !coded[i] ? `Not coded: ${dx.status.replace("_", " ")}` : engineError ?? r?.error ?? r?.handoff?.reason ?? paramsErrors[i] ?? null;
       return {
         ...dx,
         params: params[i] ?? null,

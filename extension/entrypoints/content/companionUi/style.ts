@@ -43,6 +43,11 @@ export const CARD_BODY_STYLE = `
   .fix { background: #f6f1e7; border-radius: 8px; padding: 8px 9px; font-size: 12.5px; }
   .fix ul { margin: 6px 0 0; padding-left: 16px; color: #4a453c; } .fix li { margin: 2px 0; }
   .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #e6ddcc; border-top-color: #00309f; animation: spin .8s linear infinite; flex: none; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .steps li { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #24211c; }
+  .steps li.next { color: #a39a8a; } .steps li.done { color: #7b7365; }
+  .steps .tick { width: 12px; flex: none; color: #00309f; font-size: 12px; text-align: center; }
+  .steps .dot { width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: #d8cfbe; flex: none; animation: none; }
 `;
 
 /** Styles for the Codio AI companion: one element that is a pill or a card. */

@@ -25,6 +25,32 @@ export interface CodedDiagnosis {
   trail?: { start: { code: string; term: string; desc: string | null }[]; steps: TrailStep[]; fallback: boolean } | null;
 }
 
+export interface IcdStep {
+  step: "extract" | "params" | "codes" | "done";
+  label: string;
+  done?: number;
+  total?: number;
+}
+
+const STEPS: { key: IcdStep["step"]; label: string }[] = [
+  { key: "extract", label: "Finding the diagnoses" },
+  { key: "params", label: "Reading coding details" },
+  { key: "codes", label: "Choosing the ICD-10 codes" },
+];
+
+/** The three coding steps while they run: finished ones ticked, the current one spinning with its count. */
+export function icdProgressCard(s: IcdStep): string {
+  const at = STEPS.findIndex((x) => x.key === s.step);
+  const rows = STEPS.map((x, i) => {
+    const state = s.step === "done" || i < at ? "done" : i === at ? "now" : "next";
+    const mark = state === "done" ? `<span class="tick">✓</span>` : state === "now" ? `<span class="spin"></span>` : `<span class="dot"></span>`;
+    const text = state === "now" ? s.label : x.label;
+    const count = state === "now" && s.total ? ` <span class="conf">${s.done ?? 0} of ${s.total}</span>` : "";
+    return `<li class="${state}">${mark}<span>${esc(text)}${count}</span></li>`;
+  }).join("");
+  return `${head("ICD-10 codes")}<div class="body"><ol class="steps">${rows}</ol></div>`;
+}
+
 const STATUS: Record<string, string> = { historical: "History only", uncertain: "Uncertain", ruled_out: "Ruled out" };
 
 /** The code beside a phrase, or why there is none. */

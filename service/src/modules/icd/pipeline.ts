@@ -21,6 +21,14 @@ export interface CodedDiagnosis extends Diagnosis {
   trail: JevTrail | null;
 }
 
+/** Where coding is, shown to the provider while they wait. done/total count diagnoses within a step. */
+export interface IcdStep {
+  step: "extract" | "params" | "codes" | "done";
+  label: string;
+  done?: number;
+  total?: number;
+}
+
 /** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
 function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit {
   const statements: Record<string, string> = {};
@@ -36,15 +44,23 @@ function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit 
  * ICD-10-CM code per diagnosis from the Jev engine. Diagnoses whose status is not coded (history,
  * ruled out, uncertain by default) are returned without a code so the provider still sees them.
  */
-export async function predictIcd(raw: Block[]): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
+export async function predictIcd(
+  raw: Block[],
+  onStep: (s: IcdStep) => void = () => undefined,
+): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
   const cfg = getConfig().icd_pipeline;
   const blocks = redactBlocks(raw);
   const usage: Usage[] = [];
 
+  onStep({ step: "extract", label: "Finding the diagnoses in the report" });
   const { diagnoses, usage: u1 } = await extractDiagnoses(blocks);
   usage.push(u1);
   const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
+  const toCode = coded.filter(Boolean).length;
 
+  let read = 0;
+  const paramsLabel = `Found ${diagnoses.length} ${diagnoses.length === 1 ? "diagnosis" : "diagnoses"}, reading coding details`;
+  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode });
   const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
     if (!coded[i]) return null;
     try {
@@ -53,6 +69,8 @@ export async function predictIcd(raw: Block[]): Promise<{ diagnoses: CodedDiagno
       return r.params;
     } catch {
       return null;
+    } finally {
+      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode });
     }
   });
 
@@ -61,7 +79,10 @@ export async function predictIcd(raw: Block[]): Promise<{ diagnoses: CodedDiagno
   let engineError: string | undefined;
   if (units.length) {
     try {
-      results = await runJev(units);
+      let chosen = 0;
+      const codesLabel = "Choosing the ICD-10 codes";
+      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length });
+      results = await runJev(units, () => onStep({ step: "codes", label: codesLabel, done: ++chosen, total: units.length }));
     } catch (err) {
       engineError = String(err instanceof Error ? err.message : err);
     }

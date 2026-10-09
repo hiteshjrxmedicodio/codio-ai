@@ -6,7 +6,7 @@
 import { cancelRecording, startRecording, stopRecording } from "@/utils/bg/recorder";
 import { recallReport, rememberReport } from "@/utils/bg/reportCache";
 import { saveReview, type ReviewSave } from "@/utils/bg/reviewStore";
-import { companionSettings, post } from "@/utils/bg/service";
+import { companionSettings, get, post } from "@/utils/bg/service";
 
 type Message = { type?: string; [key: string]: unknown };
 
@@ -72,6 +72,11 @@ export default defineBackground(() => {
         return post("/v1/cdi/fix", { suggestion: message.suggestion, sections: message.sections, setting: "unknown" });
       case "icd:predict":
         return post("/v1/icd/predict", { blocks: message.blocks });
+      case "icd:start":
+        // ICD coding as a job, so the card can show which step it is on.
+        return post("/v1/icd/jobs", { blocks: message.blocks });
+      case "icd:status":
+        return get(`/v1/icd/jobs/${encodeURIComponent(String(message.id))}`);
       case "report:ask":
         return post("/v1/report/ask", { title: message.title, report: message.report, question: message.question, earlier: [] });
       case "ptt:start":

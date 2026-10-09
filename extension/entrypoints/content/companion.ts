@@ -7,7 +7,8 @@
  */
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import * as card from "./companionUi/cards";
-import { icdDetailCard, icdListCard, type CodedDiagnosis } from "./companionUi/icdCards";
+import { icdDetailCard, icdListCard, icdProgressCard, type CodedDiagnosis } from "./companionUi/icdCards";
+import { runIcdJob } from "./icdJob";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
@@ -294,10 +295,10 @@ async function readReport(reuse = false): Promise<void> {
     if (usable) {
       if (usable.fingerprint === fp) return present(usable.report);
       show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
-    } else show(card.loadingCard("ICD-10 codes", "Finding each diagnosis and its code… this can take a minute."), "icd");
+    }
     const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
-    const r = await send<{ diagnoses?: CodedDiagnosis[]; engineError?: string; error?: string }>({ type: "icd:predict", blocks: page.blocks });
-    if (r.error || !r.diagnoses) throw new Error(r.error ?? "no diagnoses came back");
+    const r = await runIcdJob(page.blocks, (step) => show(icdProgressCard(step), "icd"));
+    if (!r.diagnoses) throw new Error("no diagnoses came back");
     const icd = { diagnoses: r.diagnoses, engineError: r.engineError };
     present({ title: document.title, blocks: page.blocks, coverage, icd, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
     persist();

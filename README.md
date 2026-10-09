@@ -115,6 +115,10 @@ pick-one questions are answered by the **OpenAI Decisions API** (`bridge/decisio
 `decisions`, the default) or by Jev (provider `jev`, needs `TYPESAFE_API_KEY`). The engine folder is never edited.
 Everything sent is redacted first. History, ruled-out and uncertain diagnoses are listed but not coded. Each result carries
 `trail` (the engine's path, grouped for display) so the companion can show how the code was reached.
+The companion runs it as a job (`POST /v1/icd/jobs`, then `GET /v1/icd/jobs/:id`) and shows which step it is on:
+finding diagnoses, reading coding details (n of N), choosing codes (n of N, one tick per diagnosis the engine finishes).
+The Gemini fallback uses `bridge/gemini_client.py`, which caps thinking on every model. The engine's own client caps
+it only for gemini-2.5, so newer models ran out of output budget and every fallback came back `gemini_invalid_final_response`.
 
 ## How it works, in one paragraph
 

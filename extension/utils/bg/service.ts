@@ -16,6 +16,17 @@ export async function post<T>(path: string, body: unknown): Promise<T | { error:
   }
 }
 
+/** GET from the local Codio service, with the same { error } shape as post. */
+export async function get<T>(path: string): Promise<T | { error: string }> {
+  try {
+    const res = await fetch(`${SERVICE_URL}${path}`);
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? (data as T) : { error: (data as { error?: string }).error ?? `Service returned ${res.status}` };
+  } catch (err) {
+    return { error: `Codio's service isn't reachable (${String(err)})` };
+  }
+}
+
 interface CompanionSettings {
   enabled: boolean;
   min_hits: number;

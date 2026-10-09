@@ -17,10 +17,41 @@ const params = new URLSearchParams(location.search);
 const file = params.get("file") ?? "";
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const MAX_SCALE = 1.6;
+const SERVICE_RETRY_MS = 5000;
+const SERVICE_RETRIES = 120;
+
+interface CompanionConfig {
+  enabled: boolean;
+  clinical_hints: string[];
+  min_hits: number;
+  unreachable?: true;
+}
 
 function status(html: string): void {
   $("status").innerHTML = html;
   $("status").style.display = html ? "block" : "none";
+}
+
+function notice(html: string): void {
+  $("notice").innerHTML = html;
+  $("notice").hidden = !html;
+}
+
+/**
+ * The companion's settings from the service. While the service is not running the viewer says so
+ * under its header and keeps asking, so starting the service later picks this tab up by itself.
+ */
+async function companionConfig(): Promise<CompanionConfig | null> {
+  for (let tries = 0; tries <= SERVICE_RETRIES; tries++) {
+    const cfg = (await browser.runtime.sendMessage({ type: "companion:config" }).catch(() => null)) as CompanionConfig | null;
+    if (cfg && !cfg.unreachable) {
+      notice("");
+      return cfg.enabled ? cfg : null;
+    }
+    notice("Codio's service isn't running on this computer, so this PDF can't be coded yet. It will start reading as soon as the service is back.");
+    await new Promise((r) => setTimeout(r, SERVICE_RETRY_MS));
+  }
+  return null;
 }
 
 /** Skip Codio's viewer for this file from now on in this session, and show it in Chrome's. */
@@ -89,10 +120,8 @@ async function main(): Promise<void> {
   for (let n = 1; n <= doc.numPages; n++) await renderPage(doc, n, width);
 
   // The companion, as on any web page. It looks at the PDF's text to decide whether to ask.
-  const cfg = (await browser.runtime.sendMessage({ type: "companion:config" }).catch(() => null)) as
-    | { enabled: boolean; clinical_hints: string[]; min_hits: number }
-    | null;
-  if (!cfg?.enabled) return;
+  const cfg = await companionConfig();
+  if (!cfg) return;
   companionOn();
   enableSelection();
   enablePushToTalk();

@@ -1,9 +1,14 @@
 /**
  * What the companion remembers about the report page it is on: the provider's answer to reading
  * it (this tab's session only) and a fingerprint of its words. The page key is the page's
- * address without its query, the same key the extension's session copy of a read is kept under.
+ * address without its query (in Codio's PDF viewer, the PDF's address), the same key the
+ * extension's session copy of a read is kept under.
  */
-export const pageKey = () => `codio-consent:${location.origin}${location.pathname}`;
+export function pageKey(): string {
+  // Codio's PDF viewer is one extension page for every PDF; the file it shows is in its query.
+  const file = location.protocol === "chrome-extension:" ? new URLSearchParams(location.search).get("file") : null;
+  return `codio-consent:${file ? file.split(/[?#]/)[0] : `${location.origin}${location.pathname}`}`;
+}
 export function remember(answer: "allowed" | "declined"): void {
   try {
     sessionStorage.setItem(pageKey(), answer);

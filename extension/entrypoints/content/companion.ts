@@ -7,7 +7,7 @@
  */
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import * as card from "./companionUi/cards";
-import { icdDetailCard, icdListCard, icdProgressCard, type CodedDiagnosis } from "./companionUi/icdCards";
+import { icdDetailCard, icdListCard, icdProgressCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
 import { runIcdJob } from "./icdJob";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
@@ -145,7 +145,9 @@ function mark(set: "icd" | "review"): void {
   const r = report;
   if (!r || marked === set) return;
   marked = set;
-  if (set === "icd") annotate((r.icd?.diagnoses ?? []).map((d) => d.quotes.map((q) => q.text)), pickDiagnosis);
+  // Phrases sharing a code are highlighted as one: all their quotes sit under the first phrase's marker.
+  const dx = r.icd?.diagnoses ?? [], lead = sameCodeLeaders(dx);
+  if (set === "icd") annotate(dx.map((_, i) => dx.flatMap((d, j) => (lead[j] === i ? d.quotes.map((q) => q.text) : []))), pickDiagnosis);
   else annotate(r.suggestions.map((s, i) => (r.votes[i] === "down" ? [] : s.quotes.map((q) => q.text))), pickSuggestion);
 }
 
@@ -153,8 +155,7 @@ function mark(set: "icd" | "review"): void {
 function renderIcd(focus = true): void {
   const r = report;
   if (!r?.icd) return;
-  const d = viewingDx === null ? undefined : r.icd.diagnoses[viewingDx];
-  if (d && viewingDx !== null) show(icdDetailCard(d, viewingDx), "icd", focus);
+  if (viewingDx !== null && r.icd.diagnoses[viewingDx]) show(icdDetailCard(mergeSameCode(r.icd.diagnoses, viewingDx)), "icd", focus);
   else show(icdListCard(r.icd.diagnoses, r.icd.engineError), "icd", focus);
 }
 
@@ -162,6 +163,7 @@ function renderIcd(focus = true): void {
 function pickDiagnosis(index: number): void {
   if (!report?.icd?.diagnoses[index]) return;
   mark("icd");
+  index = sameCodeLeaders(report.icd.diagnoses)[index] ?? index;
   viewingDx = index;
   focusSuggestion(index);
   renderIcd();

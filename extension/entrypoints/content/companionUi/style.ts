@@ -29,17 +29,12 @@ export const CARD_BODY_STYLE = `
   /* ICD list: the phrase, its code beside it. */
   .dx { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; border: 1px solid #e6ddcc; border-radius: 8px; background: #fff; padding: 6px 8px; font: inherit; color: inherit; }
   .dx:hover { border-color: #b9c3ea; background: #fbfaff; }
-  .dx .n { flex: none; width: 18px; height: 18px; border-radius: 50%; background: #c2410c; color: #fff; font: 700 10.5px/18px system-ui, sans-serif; text-align: center; }
   .dx .ph { flex: 1; min-width: 0; font-size: 12.5px; color: #24211c; }
   .chip { flex: none; font: 700 12px/1 ui-monospace, Menlo, monospace; color: #03045a; background: #eef1fb; border-radius: 6px; padding: 4px 6px; }
   .chip.none { font: 600 11px/1 system-ui, sans-serif; color: #7b7365; background: #f1eadd; }
-  /* Diagnosis detail: three numbered sections joined by a line, each step's result under it. */
-  .flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
-  .flow .sec { position: relative; padding: 0 0 12px 24px; }
-  .flow .sec::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 1px; background: #e6ddcc; }
-  .flow .sec:last-child { padding-bottom: 0; } .flow .sec:last-child::before { display: none; }
-  .flow .sh { display: flex; gap: 8px; align-items: center; margin-left: -24px; font-size: 12px; font-weight: 600; color: #24211c; }
-  .flow .num { width: 17px; height: 17px; border-radius: 50%; background: #eef1fb; color: #00309f; font: 700 10px/17px system-ui, sans-serif; text-align: center; flex: none; }
+  /* Diagnosis detail: three titled sections, each section's content under its title. */
+  .flow { display: grid; gap: 12px; }
+  .flow .sh { font-size: 12px; font-weight: 600; color: #24211c; }
   .flow .sb { display: grid; gap: 5px; margin-top: 5px; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
   .kv dt { color: #7b7365; } .kv dd { margin: 0; color: #24211c; }

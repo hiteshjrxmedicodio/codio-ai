@@ -81,9 +81,9 @@ export function suggestionsCard(list: Suggestion[], votes: Record<number, Vote> 
   const items = list
     .map((s, i) =>
       votes[i] === "down"
-        ? `<div class="sug gone"><span>${i + 1}. Dismissed. I won't raise this again on this note.</span></div>`
+        ? `<div class="sug gone"><span>Dismissed. I won't raise this again on this note.</span></div>`
         : `<div class="sug"><button class="sug-main" data-action="goto" data-index="${i}">
-        <b>${i + 1}. ${esc(s.title)}</b><span>${esc(IMPACT[s.gate.answer] ?? "Worth a look")}</span></button>${thumbs(i, votes[i])}</div>`,
+        <b>${esc(s.title)}</b><span>${esc(IMPACT[s.gate.answer] ?? "Worth a look")}</span></button>${thumbs(i, votes[i])}</div>`,
     )
     .join("");
   return `${head(`Review · ${open} suggestion${open === 1 ? "" : "s"}`)}<div class="body">${items}</div>`;
@@ -101,7 +101,7 @@ export function suggestionCard(s: Suggestion, index: number, vote?: Vote, fix?: 
   const rate = vote === "down"
     ? `<div class="muted">Dismissed. I won't raise this again on this note.</div>`
     : `<div class="rate"><span class="muted">${typeof fix === "object" ? "Helpful?" : "Useful?"}</span>${thumbs(index, vote)}</div>`;
-  return `${head(`Review · Suggestion ${index + 1}`)}<div class="body"><div class="group">${esc(IMPACT[s.gate.answer] ?? "Worth a look")}</div>
+  return `${head("Review · Suggestion")}<div class="body"><div class="group">${esc(IMPACT[s.gate.answer] ?? "Worth a look")}</div>
     <b style="font-size:13.5px">${esc(s.title)}</b>${quotes}${fixBlock(fix)}${rate}
     <div class="actions"><button class="btn ghost" data-action="back">All suggestions</button></div></div>`;
 }

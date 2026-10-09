@@ -48,5 +48,11 @@ export function serviceSettings(): Promise<ServiceSettings | null> {
   return cached;
 }
 
-/** The companion's part of the settings. */
-export const companionSettings = (): Promise<CompanionSettings | null> => serviceSettings().then((s) => s?.companion ?? null);
+const COMPANION_OFF: CompanionSettings = { enabled: false, clinical_hints: [], min_hits: 3 };
+
+/** The companion's part of the settings; `unreachable` when the service did not answer at all. */
+export async function companionSettings(): Promise<CompanionSettings & { unreachable?: true }> {
+  const s = await serviceSettings();
+  if (!s) return { ...COMPANION_OFF, unreachable: true };
+  return s.companion ?? COMPANION_OFF;
+}

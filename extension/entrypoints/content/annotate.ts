@@ -91,13 +91,13 @@ function ensureStyle(): void {
 
 const MARK_STYLE = `
   :host { all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483645; }
-  .b { position: fixed; width: 16px; height: 16px; border-radius: 50%; background: #fff; color: #00309f; pointer-events: auto;
-    font: 700 10px/14px system-ui, sans-serif; text-align: center; cursor: pointer; box-shadow: 0 1px 3px rgba(3,4,90,.18);
-    border: 1px solid #c9d3f0; transform: translate(-100%, 1px); transition: transform .15s, background .15s, color .15s; }
+  .b { position: fixed; width: 10px; height: 10px; border-radius: 50%; background: #fff; color: #00309f; pointer-events: auto;
+    cursor: pointer; box-shadow: 0 1px 3px rgba(3,4,90,.18);
+    border: 1px solid #c9d3f0; transform: translate(-100%, 4px); transition: transform .15s, background .15s, color .15s; }
   .b:hover, .b.on { background: #03045a; color: #fff; border-color: #03045a; }`;
 
 /** Keep each marker in the margin just left of its highlight; markers that would overlap sit side by side. */
-const BADGE = 18;
+const BADGE = 12;
 function placeBadges(): void {
   if (!badges) return;
   const placed: { left: number; top: number }[] = [];
@@ -145,7 +145,6 @@ export function annotate(quotesPerSuggestion: string[][], pick: (index: number) 
     const b = document.createElement("div");
     b.className = "b";
     b.dataset.i = String(m.index);
-    b.textContent = String(m.index + 1);
     b.title = "Open in Codio";
     b.addEventListener("click", (e) => {
       e.stopPropagation();

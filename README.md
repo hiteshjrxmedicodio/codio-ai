@@ -101,7 +101,11 @@ the panel saves (`utils/bg/reviewStore.ts` → History record under the chart's 
 its thumbs, voice questions), so the panel only needs opening for more; opened on a coded page it shows those
 codes and that review instead of reading the report again. After a refresh, a report already approved this
 session is read again and, if its words are unchanged, the last codes come straight back from the session
-cache (`utils/bg/reportCache.ts`); a changed report is coded again. Hold ⌘⌥ → listening mic, answered in place.
+cache (`utils/bg/reportCache.ts`); a changed report is coded again. The answer and the cache are kept per
+page address, and in Codio's PDF viewer per PDF (`reportMemory.ts` `pageKey`), so "Not now" on one PDF never
+silences the next one opened in the same tab. While the local service is not running, the PDF viewer says so
+in a bar under its header and keeps asking every 5 s, so it picks the tab up by itself once the service is
+started; on web pages the companion simply stays off until the next load. Hold ⌘⌥ → listening mic, answered in place.
 Click elsewhere returns it to the pill and clears the highlight. Code: `extension/entrypoints/content/
 companion.ts` (controller), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
 `selection.ts`, `pushToTalk.ts`; recording via `entrypoints/offscreen/`. The side panel remains for chat.

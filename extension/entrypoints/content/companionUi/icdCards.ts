@@ -69,6 +69,37 @@ export function icdProgressCard(s: IcdStep): string {
 
 const STATUS: Record<string, string> = { historical: "History only", uncertain: "Uncertain", ruled_out: "Ruled out" };
 
+/**
+ * Phrases that landed on the same code are one diagnosis to the provider: each phrase points at the
+ * first phrase with that code, and that first phrase opens the shared card and trail.
+ */
+export function sameCodeLeaders(list: CodedDiagnosis[]): number[] {
+  const first = new Map<string, number>();
+  return list.map((d, i) => {
+    if (!d.code) return i;
+    if (!first.has(d.code)) first.set(d.code, i);
+    return first.get(d.code) ?? i;
+  });
+}
+
+/**
+ * The card for a code stated by several phrases: every phrase's quotes, the coding details any of them
+ * documented, and one trail, from a phrase the engine coded itself if there is one (not the second opinion).
+ */
+export function mergeSameCode(list: CodedDiagnosis[], leader: number): CodedDiagnosis & { alsoAs: string[] } {
+  const lead = sameCodeLeaders(list);
+  const group = list.filter((_, i) => lead[i] === leader);
+  const main = list[leader] as CodedDiagnosis;
+  const withTrail = group.filter((d) => d.trail);
+  const trail = (withTrail.find((d) => !d.trail?.fallback) ?? withTrail[0])?.trail ?? main.trail;
+  const documented = new Map<string, { name: string; value: string }>();
+  for (const d of group) for (const p of d.params?.documented ?? []) if (!documented.has(p.name)) documented.set(p.name, p);
+  const missing = [...new Set(group.flatMap((d) => d.params?.missing ?? []))].filter((m) => !documented.has(m));
+  const params = group.some((d) => d.params) ? { documented: [...documented.values()], missing } : null;
+  const alsoAs = [...new Set(group.slice(1).map((d) => d.phrase))].filter((p) => p !== main.phrase);
+  return { ...main, quotes: group.flatMap((d) => d.quotes), params, trail, alsoAs };
+}
+
 /** The code beside a phrase, or why there is none. */
 function codeChip(d: CodedDiagnosis): string {
   if (d.code) return `<span class="chip">${esc(d.code)}</span>`;
@@ -78,10 +109,11 @@ function codeChip(d: CodedDiagnosis): string {
 export function icdListCard(list: CodedDiagnosis[], engineError?: string): string {
   if (!list.length) return `${head("ICD-10 codes")}<div class="body"><div class="muted">I didn't find any diagnoses in this report.</div></div>`;
   const coded = list.filter((d) => d.code).length;
+  const lead = sameCodeLeaders(list);
   const items = list
     .map(
-      (d, i) => `<button class="dx" data-action="dx" data-index="${i}" title="Show how this code was reached">
-        <span class="n">${i + 1}</span><span class="ph">${esc(d.phrase)}</span>${codeChip(d)}</button>`,
+      (d, i) => `<button class="dx" data-action="dx" data-index="${lead[i]}" title="Show how this code was reached">
+        <span class="ph">${esc(d.phrase)}</span>${codeChip(d)}</button>`,
     )
     .join("");
   const note = engineError ? `<div class="muted">Codes are unavailable right now: ${esc(engineError)}</div>` : "";
@@ -129,8 +161,8 @@ function distinctQuotes(quotes: { text: string }[]): string[] {
   return kept;
 }
 
-const section = (n: number, title: string, body: string) =>
-  `<li class="sec"><div class="sh"><span class="num">${n}</span>${esc(title)}</div><div class="sb">${body}</div></li>`;
+const section = (title: string, body: string) =>
+  `<section class="sec"><div class="sh">${esc(title)}</div><div class="sb">${body}</div></section>`;
 
 /** The engine's walk: its key milestones up front, every step behind "Show all steps". */
 function routeBody(d: CodedDiagnosis): string {
@@ -147,7 +179,7 @@ function routeBody(d: CodedDiagnosis): string {
   return `<ol class="trail">${key}</ol><details class="all"><summary>Show all ${li.length + 1} steps</summary><ol class="trail">${li.join("")}${end}</ol></details>`;
 }
 
-export function icdDetailCard(d: CodedDiagnosis, index: number): string {
+export function icdDetailCard(d: CodedDiagnosis & { alsoAs?: string[] }): string {
   const result = d.code
     ? `<div class="row"><span class="code">${esc(d.code)}</span><span class="desc">${esc(d.description ?? "")}</span></div>`
     : `<div class="row"><span class="muted" style="grid-column:1/-1">${esc(d.reviewReason ?? "Needs review")}</span></div>`;
@@ -159,7 +191,8 @@ export function icdDetailCard(d: CodedDiagnosis, index: number): string {
   const kv = documented.length ? `<dl class="kv">${documented.map((p) => `<dt>${esc(p.name)}</dt><dd>${esc(p.value)}</dd>`).join("")}</dl>` : "";
   const missing = d.params?.missing.length ? `<div class="gap"><span class="gl">Not documented</span>${d.params.missing.map((m) => `<span class="tag">${esc(m)}</span>`).join("")}</div>` : "";
   const details = kv || missing ? kv + missing : `<div class="muted">No coding details were read.</div>`;
-  return `${head(`ICD-10 · Diagnosis ${index + 1}`)}<div class="body"><b style="font-size:13.5px">${esc(d.phrase)}</b>${result}
-    <ol class="flow">${section(1, "Found in the report", found)}${section(2, "Coding details", details)}${section(3, "How the code was chosen", routeBody(d))}</ol>
+  const also = d.alsoAs?.length ? `<div class="muted">Also stated as ${d.alsoAs.map((p) => `“${esc(p)}”`).join(", ")}, same code and trail</div>` : "";
+  return `${head("ICD-10 · Diagnosis")}<div class="body"><b style="font-size:13.5px">${esc(d.phrase)}</b>${also}${result}
+    <div class="flow">${section("Found in the report", found)}${section("Coding details", details)}${section("How the code was chosen", routeBody(d))}</div>
     <div class="actions"><button class="btn ghost" data-action="icd-back">All diagnoses</button></div></div>`;
 }

@@ -51,7 +51,8 @@ export default defineBackground(() => {
       case "pdf:skip":
         return skipped().then((list) => browser.storage.session.set({ [SKIP_KEY]: [...list, String(message.url)] }));
       case "companion:config":
-        return companionSettings().then((s) => s ?? { enabled: false, clinical_hints: [], min_hits: 3 });
+        // `unreachable` lets the PDF viewer say the service is down instead of showing nothing.
+        return companionSettings();
       case "select:code":
         return post("/v1/select/code", { text: message.text ?? "", context: message.context ?? "" });
       case "report:check":

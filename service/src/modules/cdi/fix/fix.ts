@@ -20,7 +20,7 @@ export interface FixReply {
   choices: string[];
 }
 
-/** Runs only after a provider gives a suggestion a thumbs up. */
+/** Runs when the provider opens a suggestion (clicks its highlighted words), and again on a thumbs up after a failure. */
 export async function runFix(suggestion: Suggestion, sections: Section[], setting: CareSetting): Promise<{ fix: FixReply; usage: Usage }> {
   const text = `${findingMessage(suggestion, sections, setting)}\n\nJUDGED CRITICAL BECAUSE: ${suggestion.gate.answer}. ${suggestion.gate.reason}`;
   const { data, usage } = await callBlock<FixReply>({ blockId: BLOCK_ID, parts: [{ text }], schema: SCHEMA });

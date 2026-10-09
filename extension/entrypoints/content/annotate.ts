@@ -109,13 +109,21 @@ export function annotate(quotesPerSuggestion: string[][], pick: (index: number) 
   return new Set(hits.map((m) => m.index)).size;
 }
 
-/** Mark the items being looked at: all their words stand out, and the first item's words are scrolled into view. */
-export function focusSuggestion(index: number | number[]): void {
+/**
+ * Mark the items being looked at: all their words stand out, and the first item's words are scrolled into
+ * view. `smooth` false jumps there at once, for a card that is about to be placed beside the words.
+ */
+export function focusSuggestion(index: number | number[], smooth = true): void {
   const order = Array.isArray(index) ? index : [index];
   const mine = order.flatMap((i) => hits.filter((x) => x.index === i));
   if (!mine.length) return;
   CSS.highlights.set(ACTIVE, new Highlight(...mine.map((m) => m.range)));
-  (mine[0]?.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  (mine[0]?.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "instant" });
+}
+
+/** Where an item's first highlighted words sit on screen, for a card to open beside them. */
+export function suggestionRect(index: number): DOMRect | undefined {
+  return hits.find((m) => m.index === index)?.range.getBoundingClientRect();
 }
 
 export function clearAnnotations(): void {

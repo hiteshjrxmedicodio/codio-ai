@@ -107,8 +107,11 @@ and each phrase is highlighted and numbered on the report. Clicking a phrase, in
 parameters, and the **prediction trail** the engine took (index lookup, chapter → category → code with
 confidence, the linked Excludes/see-also categories it also checked as one line, the candidates it compared,
 its pick and the check against the chart; built in `service/bridge/jev_bridge.py` `trail()`). **Check
-documentation** in that card runs the CDI check into the Review card, each suggestion with thumbs up (logged
-to `/v1/feedback`, then "what to change" from `/v1/cdi/fix`) and thumbs down (logged, dropped from the note).
+documentation** in that card runs the CDI check: every suggestion's words are highlighted on the report and
+listed in the Review card. Clicking the words (or the row) opens a card right beside them (`issueCard.ts`,
+the pill turning into it like the code card): the problem, the words, and **what to change** from
+`/v1/cdi/fix`, fetched the moment it opens; thumbs up (logged to `/v1/feedback`) and thumbs down (logged,
+dropped from the note, card closed). Words not found on the page open in the Review card instead.
 The chart shows one set of highlights at a time, the set of the card in use. Card stack
 (`companionUi/dock.ts`): ICD-10, Review, CPT, Final codes, answers; every header always visible, one card open
 at a time with a capped height; folding the open card folds the whole stack into a slim strip on the right

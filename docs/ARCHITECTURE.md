@@ -23,7 +23,7 @@ to Gemini, or to simply running the step, so a Decisions outage never blocks the
 | Agent conversation and tool use | free text + function calls | Gemini 3.8 Flash | none |
 | Finders: contradictions, ambiguity, gaps, slips | quoted findings | Gemini 3.8 Flash | none |
 | Section mapping, screenshot transcription | text | Gemini 3.8 Flash | none |
-| Fix guidance (after a thumbs up) | text | Gemini 3.8 Flash | none |
+| Fix guidance (when a suggestion is opened) | text | Gemini 3.8 Flash | none |
 | Voice: speech to text | audio | OpenAI Whisper | none |
 | Voice: tidy the transcript | text | Gemini Flash-Lite | raw transcript |
 
@@ -156,7 +156,7 @@ sections ─► pre-screen (Decisions, 4 probabilities) ─► skip finders belo
                ─► rank coding > denial > interpretation ─► top 5 as cards
 ```
 
-A thumbs up runs P-FIX for that card; a thumbs down is logged and the provider is never asked why.
+Opening a suggestion (clicking its highlighted words) runs P-FIX for it; a thumbs up is logged and retries a failed fix; a thumbs down is logged and the provider is never asked why.
 
 ## Privacy and safety
 

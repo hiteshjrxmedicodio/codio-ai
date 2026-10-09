@@ -73,7 +73,7 @@ const THUMB_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 /** Thumbs for one suggestion. Up writes what to change; down drops it from this note. */
 function thumbs(index: number, vote: Vote | undefined): string {
-  return `<span class="votes"><button class="vote${vote === "up" ? " on" : ""}" data-action="up" data-index="${index}" aria-pressed="${vote === "up"}" aria-label="Useful, show what to change" title="Useful, show what to change">${THUMB_UP}</button><button class="vote" data-action="down" data-index="${index}" aria-label="Not useful" title="Not useful">${THUMB_DOWN}</button></span>`;
+  return `<span class="votes"><button class="vote${vote === "up" ? " on" : ""}" data-action="up" data-index="${index}" aria-pressed="${vote === "up"}" aria-label="Useful" title="Useful">${THUMB_UP}</button><button class="vote" data-action="down" data-index="${index}" aria-label="Not useful" title="Not useful">${THUMB_DOWN}</button></span>`;
 }
 
 export function suggestionsCard(list: Suggestion[], votes: Record<number, Vote> = {}): string {
@@ -96,7 +96,7 @@ export function suggestionsCard(list: Suggestion[], votes: Record<number, Vote> 
 function fixBlock(fix: Fix | undefined): string {
   if (!fix) return "";
   if (fix === "loading") return `<div class="muted" style="display:flex;gap:8px;align-items:center"><span class="spin"></span>Writing what to change…</div>`;
-  if (fix === "error") return `<div class="muted">I couldn't write what to change right now. Try the thumbs up again.</div>`;
+  if (fix === "error") return `<div class="muted">I couldn't write what to change right now. Click the highlighted words again to retry.</div>`;
   return `<div class="fix"><div>${esc(fix.guidance)}</div><ul>${fix.choices.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>`;
 }
 
@@ -107,6 +107,20 @@ export function suggestionCard(s: Suggestion, index: number, vote?: Vote, fix?: 
     : `<div class="rate"><span class="muted">${typeof fix === "object" ? "Helpful?" : "Useful?"}</span>${thumbs(index, vote)}</div>`;
   return `${head("Review · Suggestion")}<div class="body"><div class="group">${esc(IMPACT[s.gate.answer] ?? "Worth a look")}</div>
     <b style="font-size:13.5px">${esc(s.title)}</b>${quotes}${fixBlock(fix)}${rate}
+    <div class="actions"><button class="btn ghost" data-action="back">All suggestions</button></div></div>`;
+}
+
+const DISMISSED = `<div class="muted">Dismissed. I won't raise this again on this note.</div>`;
+
+/**
+ * The card that opens beside a suggestion's highlighted words on the report: what the problem is, the
+ * words themselves, and what to change (P-FIX, written as soon as the words are clicked), with thumbs.
+ */
+export function issueCard(s: Suggestion, index: number, vote?: Vote, fix?: Fix): string {
+  const quotes = s.quotes.slice(0, 2).map((q) => `<div class="muted quote" title="${esc(q.text)}">“${esc(q.text)}”</div>`).join("");
+  const change = vote === "down" ? "" : `<div class="group">What to change</div>${fixBlock(fix)}`;
+  const rate = vote === "down" ? DISMISSED : `<div class="rate"><span class="muted">Useful?</span>${thumbs(index, vote)}</div>`;
+  return `${head(`Review · ${IMPACT[s.gate.answer] ?? "Worth a look"}`)}<div class="body"><b style="font-size:13.5px">${esc(s.title)}</b>${quotes}${change}${rate}
     <div class="actions"><button class="btn ghost" data-action="back">All suggestions</button></div></div>`;
 }
 

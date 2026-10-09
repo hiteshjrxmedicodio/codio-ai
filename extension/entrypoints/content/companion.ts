@@ -6,6 +6,7 @@
  * becomes the listening mic and answers in place. Click elsewhere → back to the pill.
  */
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
+import { closeIssue, openIssue, refreshIssue } from "./issueCard";
 import * as card from "./companionUi/cards";
 import { icdDetailCard, icdListCard, icdProgressCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
 import { follow, isCoding, startCoding, type CodedReport } from "./reportJobs";
@@ -14,6 +15,7 @@ import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
 import { cptCardHtml, type CptCard } from "./reportRun";
+import { answerByVoice } from "./voiceQuestion";
 
 export { consent };
 
@@ -75,6 +77,7 @@ export function showPrediction(id: "icd" | "cpt" | "final", codes: card.Code[] |
 
 /** Card gone, highlight gone: back to the pill that follows the pointer. */
 export function dismiss(clearSelection = true): void {
+  closeIssue();
   view.closeCard();
   if (clearSelection) window.getSelection()?.removeAllRanges();
 }
@@ -121,6 +124,7 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
   else if (action === "goto") pickSuggestion(index);
   else if (action === "up" || action === "down") void vote(index, action);
   else if (action === "back") {
+    dismiss(false);
     viewing = null;
     renderReview();
   }
@@ -166,12 +170,37 @@ function pickDiagnosis(index: number): void {
 }
 
 // ── Documentation check (one click from the ICD card): suggestions with thumbs ──
+/** A suggestion's words clicked on the report (or its row in the list): the card opens beside the words. */
 function pickSuggestion(index: number): void {
-  if (!report?.suggestions[index]) return;
+  const r = report;
+  if (!r?.suggestions[index]) return;
   mark("review");
   viewing = index;
-  focusSuggestion(index);
-  renderReview();
+  focusSuggestion(index, false);
+  // Words that could not be found on the page fall back to the review card in the stack.
+  const beside = openIssue(r, index);
+  renderReview(!beside);
+  void loadFix(index);
+}
+
+/** The review card (never taking over) and the card beside the words, when it shows this suggestion. */
+function redraw(index: number): void {
+  renderReview(false);
+  if (report) refreshIssue(report, index);
+}
+
+/** What to change for one suggestion, written the first time it is opened, or again after a failure. */
+async function loadFix(index: number): Promise<void> {
+  const r = report;
+  const s = r?.suggestions[index];
+  if (!r || !s || r.votes[index] === "down" || (r.fixes[index] && r.fixes[index] !== "error")) return;
+  r.fixes[index] = "loading";
+  redraw(index);
+  const res = await send<{ fix?: { guidance: string; choices: string[] } }>({ type: "review:fix", suggestion: s, sections: r.sections }).catch(() => ({ fix: undefined }));
+  if (report !== r) return;
+  r.fixes[index] = res.fix ?? "error";
+  redraw(index);
+  persist();
 }
 
 /** The review card as it stands: one suggestion with its thumbs and fix, or the list. */
@@ -200,34 +229,27 @@ async function checkDocumentation(): Promise<void> {
 
 /**
  * A thumbs on a suggestion, logged to the same feedback file as the panel's. Down drops it from
- * this note; up writes what to change, shown in its card.
+ * this note (its card closes); up keeps it, and fetches what to change again if that had failed.
  */
 async function vote(index: number, dir: card.Vote): Promise<void> {
   const r = report;
   const s = r?.suggestions[index];
   if (!r || !s) return;
-  const retry = dir === "up" && r.fixes[index] === "error";
-  if (r.votes[index] === dir && !retry) return;
-  if (r.votes[index] !== dir) send({ type: "review:feedback", suggestion: s, vote: dir }).catch(() => undefined);
+  if (r.votes[index] === dir) return dir === "up" ? loadFix(index) : undefined;
+  send({ type: "review:feedback", suggestion: s, vote: dir }).catch(() => undefined);
   r.votes[index] = dir;
   if (dir === "down") {
     delete r.fixes[index];
     if (viewing === index) viewing = null;
+    dismiss(false);
     marked = null;
     mark("review");
     renderReview();
     return persist();
   }
-  viewing = index;
-  focusSuggestion(index);
-  r.fixes[index] = "loading";
-  renderReview();
-  const res = await send<{ fix?: { guidance: string; choices: string[] } }>({ type: "review:fix", suggestion: s, sections: r.sections }).catch(() => ({ fix: undefined }));
-  if (report !== r) return;
-  r.fixes[index] = res.fix ?? "error";
-  // The provider may be reading another card by now; the review card updates without taking over.
-  renderReview(false);
+  redraw(index);
   persist();
+  return loadFix(index);
 }
 
 let saving: Promise<unknown> = Promise.resolve();
@@ -316,25 +338,9 @@ async function readReport(reuse = false): Promise<void> {
 
 const fromCoded = ({ fingerprint: _, ...r }: CodedReport): Report => ({ ...r, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
 
-// ── Voice questions ────────────────────────────────────────────────────────
-/** Answer a spoken question in place: from the report once read, or ask to read it first. */
-export async function askByVoice(question: string, looksClinical = false): Promise<void> {
-  if (!report) {
-    if (looksClinical && consent() !== "declined") {
-      pendingQuestion = question;
-      show(card.permissionCard(), "icd");
-    } else {
-      show(card.answerCard(question, "Open a medical report and let me read it first."), "answer");
-    }
-    return;
-  }
-  show(card.loadingCard("Your question", "Looking in the report…"), "answer");
-  const text = report.blocks.map((b) => (b.heading ? `--- ${b.heading}\n${b.text}` : b.text)).join("\n\n");
-  const r = await send<{ answer?: string; error?: string }>({ type: "report:ask", title: report.title, report: text, question });
-  show(card.answerCard(question, r.answer ?? "I couldn't answer that right now."), "answer");
-  // Kept with the report's record, like a question asked in the panel.
-  if (r.answer) persist([{ q: question, a: r.answer }]);
-}
+// ── Voice questions (voiceQuestion.ts) ─────────────────────────────────────
+export const askByVoice = (question: string, looksClinical = false): Promise<void> =>
+  answerByVoice(question, looksClinical, { report: () => report, show, hold: (q) => (pendingQuestion = q), persist });
 
 // ── Pill modes and lifecycle ───────────────────────────────────────────────
 /** Push-to-talk and short notes. Listening always clears any card and highlight first. */

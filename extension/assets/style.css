@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Scan these folders for class names, whatever directory the build runs from. */
+@source "../components";
+@source "../entrypoints";
+@source "../utils";
+
+/* Beige throughout, with a touch of Medicodio blue only on the send button, switches and links. Ignores browser dark mode. */
+:root {
+  --bg: #faf6ee;
+  --surface: #f1eadd;
+  --raised: #fffdf8;
+  --line: #e6ddcc;
+  --text: #24211c;
+  --muted: #7b7365;
+  --accent: #00309f;
+  --accent-fg: #ffffff;
+  --accent-soft: #e5ebf7;
+  --accent-line: #c7d3ec;
+  --brand: #03045a;
+  --coding: #c2410c;
+  --denial: #b45309;
+  --interp: #0f766e;
+  --ok: #15803d;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-brand: var(--brand);
+  --color-coding: var(--coding);
+  --color-denial: var(--denial);
+  --color-interp: var(--interp);
+  --color-ok: var(--ok);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-bg text-ink font-sans text-[14px] leading-relaxed antialiased;
+}
+
+/* Keyboard focus ring for buttons and links. Base layer, so a utility can turn it off, and the
+   message box is excluded: its rounded container shows focus instead of a square outline. */
+@layer base {
+  textarea:focus,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  :focus-visible:not(textarea) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* A soft fade when the panel moves to another page or state, instead of a hard jump. */
+@keyframes codio-fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in {
+  animation: codio-fade-in 160ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

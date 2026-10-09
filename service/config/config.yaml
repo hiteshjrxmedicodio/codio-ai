@@ -1,0 +1,252 @@
+# Single source of truth for the CDI Assist service.
+# Every model, budget, threshold and switch lives here. Code reads it through src/core/config.ts.
+
+server:
+  host: 127.0.0.1          # localhost only: page content is PHI
+  port: 8787
+  json_limit: 25mb         # screenshots and audio arrive as base64
+
+llm:
+  api_key_env: GEMINI_API_KEY
+  timeout_ms: 90000
+  parse_retries: 1         # retry once when the model returns unparseable JSON
+
+openai:
+  api_key_env: OPENAI_API_KEY
+  base_url: https://api.openai.com/v1
+  timeout_ms: 30000
+  decisions_model: gpt-6-luna
+  transcribe_model: whisper-1
+
+# One entry per prompt. thinking: a level (minimal|low|medium|high) or an integer token budget.
+# Gemini thinks adaptively when this is omitted and bills it as output, so it is always set.
+blocks:
+  P-AGENT:       { prompt: agent/p_agent.txt,              model: gemini-3.8-flash,      thinking: low,     temperature: 0.2, max_output_tokens: 2048,  enabled: true }
+  P-PAGE-CHECK:  { prompt: page/p_page_check.txt,          model: gemini-3.5-flash-lite, thinking: minimal, temperature: 0,   max_output_tokens: 256,   enabled: true }
+  P-VOICE-CLEAN: { prompt: voice/p_voice_clean.txt,        model: gemini-3.5-flash-lite, thinking: minimal, temperature: 0,   max_output_tokens: 512,   enabled: true }
+  P-READ-SCREEN: { prompt: reading/p_read_screen.txt,      model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 16384, enabled: true }
+  P-REPORT-ASK:  { prompt: report/p_report_ask.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  P-SUMMARIZE:   { prompt: report/p_summarize_report.txt,   model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 8192,  enabled: true }
+  P-DX-EXTRACT:  { prompt: coding/p_dx_extract.txt,        model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 8192,  enabled: true }
+  P-DX-PARAMS:   { prompt: coding/p_dx_params.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  P-ICD-CODE:    { prompt: coding/p_icd_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  P-CPT-CODE:    { prompt: coding/p_cpt_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  P-READ-FILE:   { prompt: reading/p_read_file.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 32768, enabled: true }
+  P-READ-MAP:    { prompt: reading/p_read_section_map.txt, model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 16384, enabled: true }
+  P-CON:  { prompt: cdi/p_con_contradictions.txt, model: gemini-3.8-flash, thinking: medium, temperature: 0, max_output_tokens: 8192, enabled: true }
+  P-AMB:  { prompt: cdi/p_amb_ambiguity.txt,      model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
+  P-INC:  { prompt: cdi/p_inc_unaddressed.txt,    model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
+  P-WRD:  { prompt: cdi/p_wrd_wording.txt,        model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
+  P-GATE: { prompt: cdi/p_gate_criticality.txt,   model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 1024, enabled: true }
+  P-FIX:  { prompt: cdi/p_fix_guidance.txt,       model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 1024, enabled: true }
+  P-DICT-REPORT: { prompt: dictation/p_dictation_report.txt, model: gemini-3.8-flash, thinking: low, temperature: 0, max_output_tokens: 8192, enabled: true }
+
+# Prompts sent to the OpenAI Decisions API as question instructions. Bounded answers only.
+decision_blocks:
+  D-SCREEN-CON:  { prompt: decisions/p_screen_contradiction.txt }
+  D-SCREEN-AMB:  { prompt: decisions/p_screen_ambiguity.txt }
+  D-SCREEN-INC:  { prompt: decisions/p_screen_unaddressed.txt }
+  D-SCREEN-WRD:  { prompt: decisions/p_screen_wording.txt }
+  D-PICK-CONTROL: { prompt: decisions/p_pick_control.txt }
+  D-SELECT-KIND:  { prompt: decisions/p_select_kind.txt }
+  D-PICK-SECTION: { prompt: decisions/p_pick_section.txt }
+
+# Where the Decisions API replaces a Gemini call. Each falls back to Gemini (or to running the
+# step) when the Decisions API errors or refuses, so a Decisions outage never blocks a provider.
+decisions:
+  gate:
+    provider: openai_decisions   # openai_decisions | gemini (P-GATE prompt is the instructions either way)
+    choices:
+      - { value: not_real,       description: The quoted text does not show the problem the finding describes }
+      - { value: not_critical,   description: Real, but would not change coding, payment or how the note is understood }
+      - { value: coding,         description: Resolving it could change what a coder is permitted to report from this note }
+      - { value: denial,         description: A payer or auditor could reasonably cite it to deny, reduce or recover payment }
+      - { value: interpretation, description: A reader could misunderstand a diagnosis, procedure or result because of it }
+  prescreen:
+    enabled: true                # one Decisions request with one probability question per finder
+    skip_below: 0.15             # a finder runs unless its probability is below this; refusals always run
+    finders:                     # finder block → its screening question
+      P-CON: D-SCREEN-CON
+      P-AMB: D-SCREEN-AMB
+      P-INC: D-SCREEN-INC
+      P-WRD: D-SCREEN-WRD
+  pick_control:
+    enabled: true
+    max_controls: 40             # visible controls offered as choices, after blocked ones are removed
+    min_confidence: 0.3          # below this the agent is told no confident match was found
+
+# Runs whenever the tab's address changes, before anything on the page is read.
+# A not-clinical answer means nothing from the page reaches any model after this point.
+page_check:
+  provider: openai_decisions     # openai_decisions | gemini
+  fallback: gemini               # gemini | none — used when the primary errors or refuses
+  max_chars: 8000                # page text sent to decide; EMR menus and headers often fill the first few thousand characters
+  min_confidence: 0.6            # below this, the answer is treated as not clinical
+  choices:
+    - { value: operative,      setting: operative, description: A note documenting a procedure or operation on a patient }
+    - { value: enm,            setting: enm,       description: A note documenting an office, clinic, telehealth or other outpatient visit }
+    - { value: inpatient,      setting: inpatient, description: A note documenting a patient's hospital stay, admission or discharge }
+    - { value: other_clinical, setting: unknown,   description: Content about an individual patient's care that is not one of the note kinds above }
+    - { value: not_clinical,   setting: none,      description: Anything that does not document an individual patient's care }
+
+agent:
+  max_steps: 20                  # actions per provider message before the agent must reply
+  max_page_chars: 20000          # page text sent with each observation
+  dom_min_chars: 300             # below this the page is treated as drawn, and screenshots are read instead
+  keep_screenshots: 1            # older screenshots are dropped from the history to save tokens
+  max_history_turns: 24
+  auto_check_on_new_note: true   # run the documentation checks as soon as a note opens
+  history_max_chats: 30          # past conversations kept in the browser; the oldest go first
+  history_keep_days: 14          # a past conversation holds chart text (PHI), so it expires
+  # Labels whose values identify a chart; past chats are listed under them. Masked values are skipped.
+  chart_id_labels: [Med ID, MRN, Encounter ID, Encounter, Claim ID, Account, Account No, Visit ID, FIN, CSN, Patient ID]
+
+pipeline:
+  finders: [P-CON, P-AMB, P-INC, P-WRD]      # run in parallel with the code screen
+  gate_concurrency: 8
+  max_suggestions: 5
+  shown_answers: [coding, denial, interpretation]   # gate answers a provider can see, in rank order
+  min_confidence: 0                                  # raise after the first review round
+
+# Documents the provider attaches with the + button. Text files are read as they are; PDFs and
+# images are transcribed by P-READ-FILE, then mapped to sections. Attachments count as clinical
+# because the provider chose to share them; the page gate does not apply to them.
+# What the extension does. summary_only pauses every other feature (chat, the automatic
+# documentation check, navigation): opening a report reads all of it and summarises each field.
+# HIPAA minimum necessary: patient identifiers never reach a model and never appear in what the
+# provider sees. Every text sent to Gemini or the Decisions API, and every summary or answer
+# returned, is scrubbed. Age, sex/gender and the insurance payer or plan are the only patient
+# demographics kept (keep_labels win over identifier_labels).
+privacy:
+  enabled: true
+  placeholder: "[removed]"
+  keep_labels: [age, sex, gender, insurance, insurance name, payer, payor, plan, plan name, carrier, primary insurance, secondary insurance, coverage, financial class]
+  identifier_labels:
+    [name, patient name, patient, full name, first name, last name, middle name, preferred name, nickname, alias,
+     dob, d.o.b, date of birth, birth date, birthdate,
+     mrn, medical record, medical record number, record number, chart number, patient id, patient number, account, account number, acct, acct number,
+     encounter number, visit number, fin, csn, har, case number,
+     ssn, social security, social security number,
+     address, home address, street, address line 1, address line 2, city, zip, zip code, postal code,
+     phone, phone number, telephone, tel, home phone, cell, cell phone, mobile, work phone, fax, email, e-mail,
+     member id, subscriber id, subscriber, policy number, policy no, "policy #", group number, group no, insurance id, id number, beneficiary id, medicaid id, medicare id,
+     guarantor, emergency contact, next of kin, contact person, mother, father, spouse, guardian, parent,
+     driver license, drivers license, license number, passport, employer]
+  # Narrative mentions: titles before a capitalised name. Provider titles (Dr) are not patient identifiers.
+  name_titles: [Mr, Mrs, Ms, Miss, Mx]
+
+# Highlight text on a page while the panel is open: the Decisions API decides whether it is a
+# diagnosis, a procedure, both or neither, then Gemini predicts ICD-10-CM and/or CPT codes.
+selection:
+  enabled: true
+  min_chars: 3
+  max_chars: 1500
+  context_chars: 600            # surrounding page text sent to settle laterality, approach and so on
+  min_confidence: 0.5           # below this the triage answer counts as neither
+  max_codes: 3
+  choices:
+    - { value: diagnosis, description: The text documents a condition, symptom or finding the patient has }
+    - { value: procedure, description: The text documents a service, operation, test or treatment performed on the patient }
+    - { value: both,      description: The text documents at least one diagnosis and at least one procedure }
+    - { value: neither,   description: The text documents nothing that would be coded }
+
+# The Codio AI companion on every page. It decides locally (no network) whether a page looks like
+# a medical report by counting these headings; only then does it ask permission to read it. Nothing
+# leaves the computer until the provider says yes.
+companion:
+  enabled: true
+  min_hits: 3
+  clinical_hints: [chief complaint, history of present illness, hpi, review of systems, physical exam, examination,
+    assessment, plan, diagnosis, diagnoses, impression, procedure, findings, medications, allergies, vital signs,
+    discharge summary, operative report, op note, pathology, lab results, laboratory, progress note, date of service,
+    attending, admission, discharge, indication, specimen, anesthesia, postoperative, preoperative, mrn, encounter]
+
+# Report → diagnoses (with the exact phrases) → coding parameters → ICD-10-CM code from the ICD engine
+# in jev_path (CMS index search, tree walk, links, verification; Gemini fallback). Its pick-one questions
+# are answered by `provider`: decisions = OpenAI Decisions API (OPENAI_API_KEY), jev = Jev (TYPESAFE_API_KEY).
+# Clinical state sent to either is redacted first.
+icd_pipeline:
+  provider: decisions
+  decisions_model: gpt-6-luna
+  jev_path: /Users/hiteshshanthakumar/Desktop/jev_icd_engine
+  python: python3
+  workers: 6
+  retrieval_limit: 8
+  gemini_fallback: true
+  gemini_model: gemini-3.8-flash
+  timeout_ms: 300000
+  include_statuses: [current]       # which extracted statuses go on to coding
+  param_concurrency: 6
+
+features:
+  summary_only: true
+
+# Reading a whole report before summarising it.
+report:
+  max_scroll_steps: 60           # scroll steps per scrollable area before giving up
+  max_screens: 20                # screenshots for reports drawn as images
+  max_chars: 120000              # report text sent to the summary prompt
+  # Read a copy of the report in a background tab, grouped next to the provider's, so their own
+  # screen never scrolls and they can keep working. Reports drawn as images still need the
+  # provider's tab (Chrome only screenshots the visible tab).
+  background_tab: true
+  background_load_seconds: 30    # how long the copy may take to load before reading falls back to the provider's tab
+
+files:
+  max_mb: 15
+  max_files: 5
+  text_types: [text/plain, text/markdown, text/csv]
+  model_types: [application/pdf, image/png, image/jpeg, image/webp, image/heic]
+
+# Dictate a note, get it back as report sections, then click fields on the page to fill them.
+dictation:
+  max_audio_mb: 24               # Whisper accepts up to 25 MB per file
+  segment_seconds: 6             # live transcription: the recording is sent in pieces this long
+  context_chars: 300             # the end of the text so far, sent with each piece so words carry across the cut
+  min_confidence: 0.5            # below this the clicked field is left empty
+  whisper_prompt: A physician dictating a clinical note for a procedure or visit, using medical and surgical terminology.
+  # Field labels that mean a section, checked before asking the Decisions API (lowercase, words only).
+  field_aliases:
+    chief_complaint: [cc, reason for visit, chief complaint]
+    history_present_illness: [hpi, history of present illness]
+    pre_op_diagnosis: [preoperative diagnosis, pre op diagnosis, preop diagnosis, pre op dx, preop dx, indications, indications for procedure]
+    post_op_diagnosis: [postoperative diagnosis, post op diagnosis, postop diagnosis, post op dx, postop dx]
+    procedure_performed: [procedure, procedures, procedure performed, procedures performed, operation]
+    procedure_description: [description of procedure, procedure description, procedure details, technique]
+    findings: [findings, impression, impressions]
+    assessment: [assessment, impression]
+    plan: [plan, recommendations]
+
+voice:
+  max_audio_mb: 20
+  rephrase: true                 # Whisper text → P-VOICE-CLEAN; false returns the raw transcript
+
+# Standard sections the section-map prompt may assign text to. It may use only these names.
+sections:
+  - { name: chief_complaint,       description: Reason for the visit in the patient's or provider's words }
+  - { name: history_present_illness, description: Narrative of the current problem }
+  - { name: review_of_systems,     description: System-by-system symptom review }
+  - { name: past_history,          description: Past medical, surgical, family and social history }
+  - { name: medications,           description: Current medication list }
+  - { name: allergies,             description: Allergies and reactions }
+  - { name: physical_exam,         description: Examination findings and vital signs }
+  - { name: results,               description: Labs, imaging, pathology and other results }
+  - { name: assessment,            description: Provider's impressions and diagnoses }
+  - { name: plan,                  description: Orders, treatments, referrals and follow-up }
+  - { name: pre_op_diagnosis,      description: Diagnosis recorded before the procedure }
+  - { name: post_op_diagnosis,     description: Diagnosis recorded after the procedure }
+  - { name: procedure_performed,   description: Name or title of the procedure }
+  - { name: procedure_description, description: Narrative of how the procedure was done }
+  - { name: findings,              description: What the procedure found }
+  - { name: anesthesia,            description: Anesthesia type and details }
+  - { name: specimens,             description: Specimens taken and sent }
+  - { name: complications,         description: Complications and estimated blood loss }
+  - { name: signature_attestation, description: Provider signature, credentials, attestation and dates }
+  - { name: other,                 description: Text that fits no other section }
+
+# Placeholder until the platform exposes a mandatory-fields lookup by specialty and report type.
+required_sections:
+  operative: [pre_op_diagnosis, post_op_diagnosis, procedure_performed, procedure_description, signature_attestation]
+  enm:       [chief_complaint, history_present_illness, assessment, plan, signature_attestation]
+  inpatient: [history_present_illness, assessment, plan, signature_attestation]
+  unknown:   []

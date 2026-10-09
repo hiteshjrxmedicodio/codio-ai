@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF · Codio AI</title>
+    <style>
+      :root { --bg: #525659; --bar: #323639; --text: #f1f1f1; --muted: #c4c7c5; --accent: #8ab4f8; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 16px;
+        background: var(--bar); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+      header .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
+      header .pages { color: var(--muted); }
+      header .spacer { flex: 1; }
+      header button, header a { background: none; border: 1px solid rgba(255,255,255,.25); color: var(--text); border-radius: 6px;
+        padding: 5px 10px; font: inherit; cursor: pointer; text-decoration: none; }
+      header button:hover, header a:hover { background: rgba(255,255,255,.08); }
+      #pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0 40px; }
+      .page { position: relative; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+      .page canvas { display: block; }
+      #status { color: var(--text); text-align: center; padding: 60px 20px; max-width: 520px; margin: 0 auto; line-height: 1.6; }
+      #status button { margin-top: 14px; background: #00309f; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="name" id="name">PDF</span><span class="pages" id="count"></span>
+      <span class="spacer"></span>
+      <button id="chrome" type="button" title="Open this PDF in Chrome's own viewer">Open in Chrome's viewer</button>
+      <a id="download" download>Download</a>
+    </header>
+    <div id="status">Opening the PDF…</div>
+    <main id="pages"></main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

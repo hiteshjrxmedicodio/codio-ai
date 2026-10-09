@@ -1,0 +1,11 @@
+{
+  "name": "cdi-assist",
+  "private": true,
+  "scripts": {
+    "dev:service": "pnpm --filter @cdi-assist/service dev",
+    "dev:ext": "pnpm --filter @cdi-assist/extension dev",
+    "build:ext": "pnpm --filter @cdi-assist/extension build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @cdi-assist/service test"
+  }
+}

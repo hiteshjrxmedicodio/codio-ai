@@ -1,0 +1,58 @@
+# Deterministic record checks (no LLM). Each rule carries the gate answer it gets by default,
+# because a pattern match needs no model to judge it. Change answers here, never in code.
+# answer: coding | denial | interpretation | not_critical
+
+placeholders:
+  id: K1
+  answer: interpretation
+  title: Template placeholder left in the note
+  patterns:
+    - '\*{3,}'
+    - '\[\s*\]'
+    - '\{\{[^}]*\}\}'
+    - '_{4,}'
+    - '\bX{3,}\b'
+    - '<<[^>]*>>'
+
+# The Joint Commission official do-not-use list.
+do_not_use:
+  id: K2
+  answer: interpretation
+  title: Do-not-use abbreviation
+  patterns:
+    - { pattern: '\b\d+(\.\d+)?\s?U\b', label: U for units }
+    - { pattern: '\b\d+(\.\d+)?\s?IU\b', label: IU for international units }
+    - { pattern: '\bq\.?\s?o\.?\s?d\.?\b', flags: i, label: QOD }
+    - { pattern: '\bq\.d\.|\bQD\b|\bqd\b', label: QD }
+    - { pattern: '\b\d+\.0\s?(mg|mcg|g|mL|units?)\b', label: Trailing zero }
+    - { pattern: '(^|[^\d.])\.\d+\s?(mg|mcg|g|mL)\b', label: Missing leading zero }
+    - { pattern: '\bMSO4\b|\bMgSO4\b', label: MSO4 or MgSO4 }
+
+signature:
+  id: K3
+  answer: denial
+  title: No provider signature or attestation found
+  # A note passes when any of these appears anywhere in it.
+  present_patterns:
+    - 'electronically signed'
+    - 'signed by'
+    - 'attest'
+    - 'authenticated by'
+    - '/s/'
+    - 'e-signed'
+
+required_sections:
+  id: K4
+  answer: denial
+  title: Required sections are empty
+
+duplicates:
+  id: K5
+  answer: denial
+  title: The same block of text appears twice
+  min_chars: 120
+
+dates:
+  id: K6
+  answer: denial
+  title: Date in the future

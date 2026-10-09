@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Microphone · Codio</title>
+    <style>
+      /* Fallback popup for pages the panel can't ask from. Same beige-and-navy look as the panel. */
+      :root {
+        --bg: #faf6ee; --raised: #fffdf8; --surface: #f1eadd; --line: #e6ddcc;
+        --text: #24211c; --muted: #7b7365; --accent: #00309f; --brand: #03045a;
+        --ok: #15803d; --bad: #c2410c;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body { margin: 0; background: var(--bg); color: var(--text);
+             font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+
+      header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
+               border-bottom: 1px solid var(--line); }
+      header img { height: 24px; width: auto; display: block; }
+      header span { font-size: 12px; color: var(--muted); }
+
+      /* Points at where Chrome draws its Allow bubble (top left, under the address bar). */
+      .pointer { display: none; align-items: center; gap: 6px; margin: 10px 16px 0; padding: 7px 10px; border-radius: 10px;
+                 background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 600; width: fit-content; }
+      .pointer svg { width: 14px; height: 14px; animation: nudge 1.2s ease-in-out infinite; }
+      .waiting .pointer { display: flex; }
+      @keyframes nudge { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-2px, -3px); } }
+
+      main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 20px 22px 18px; text-align: center; }
+      .badge { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
+               background: var(--surface); color: var(--brand); transition: background .25s, color .25s; }
+      .badge svg { width: 24px; height: 24px; }
+      .waiting .badge { animation: pulse 1.6s ease-in-out infinite; }
+      .done .badge { background: color-mix(in srgb, var(--ok) 14%, white); color: var(--ok); }
+      .blocked .badge { background: color-mix(in srgb, var(--bad) 12%, white); color: var(--bad); }
+      @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 48, 159, .18); } 50% { box-shadow: 0 0 0 10px rgba(0, 48, 159, 0); } }
+
+      h1 { margin: 0 0 4px; font-size: 18px; font-weight: 650; color: var(--brand); text-wrap: balance; }
+      p.lead { margin: 0 auto 18px; max-width: 300px; color: var(--muted); font-size: 13.5px; }
+
+      /* Three-step progress bar: ask, allow, done. */
+      ol { list-style: none; margin: 0 auto 20px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 320px; }
+      li { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; color: var(--muted); }
+      li::before { content: ""; height: 4px; border-radius: 4px; background: var(--line); }
+      li.past::before { background: var(--ok); }
+      li.now::before { background: var(--accent); }
+      li.now { color: var(--text); font-weight: 600; }
+      li span.n { display: none; }
+
+      .actions { display: grid; gap: 8px; max-width: 320px; width: 100%; margin: 0 auto; }
+      button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 12px; padding: 10px 16px; cursor: pointer; border: 0; }
+      button.primary { background: var(--accent); color: #fff; }
+      button.primary:hover { filter: brightness(1.08); }
+      button.secondary { background: var(--raised); color: var(--text); border: 1px solid var(--line); }
+      button.secondary:hover { background: var(--surface); }
+      button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .note { margin: 14px auto 0; max-width: 300px; font-size: 12px; color: var(--muted); }
+      [hidden] { display: none !important; }
+      @media (prefers-reduced-motion: reduce) { .waiting .badge, .pointer svg { animation: none; } }
+    </style>
+  </head>
+  <body id="card" class="ready">
+    <header>
+      <img src="/medicodio-logo.png" alt="Medicodio" />
+      <span>Microphone setup</span>
+    </header>
+
+    <div class="pointer" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 17L7 7M7 15V7h8" /></svg>
+      Choose Allow in Chrome's box up here
+    </div>
+
+    <main aria-live="polite">
+      <div class="badge" id="badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+        </svg>
+      </div>
+      <h1 id="title">Turn on your microphone</h1>
+      <p class="lead" id="lead">So you can talk to Codio instead of typing. You only do this once.</p>
+
+      <ol id="steps" aria-label="Progress">
+        <li id="s1" class="now"><span class="n">1</span>Ask</li>
+        <li id="s2"><span class="n">2</span>Allow</li>
+        <li id="s3"><span class="n">3</span>Done</li>
+      </ol>
+
+      <div class="actions">
+        <button class="primary" id="allow" type="button">Turn on microphone</button>
+        <button class="primary" id="settings" type="button" hidden>Open Chrome's microphone settings</button>
+        <button class="secondary" id="retry" type="button" hidden>Try again</button>
+      </div>
+      <p class="note" id="note">Codio only listens after you tap the mic in the panel.</p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

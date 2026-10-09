@@ -19,9 +19,9 @@ export const DOCK_STYLE = `
   .strip .n { min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #fff; color: #03045a; font-size: 10px; line-height: 16px; text-align: center; }
   .strip.updated .dot { animation: ping 1.4s ease-out; }
   .stack { box-sizing: border-box; width: 357px; max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
-    font: 13px/1.45 system-ui, -apple-system, sans-serif; color: #24211c; scrollbar-width: thin; }
+    font: 13px/1.45 system-ui, -apple-system, sans-serif; color: #1f2230; scrollbar-width: thin; }
   .stack:empty { display: none; }
-  .card { flex: none; background: #fffdf8; border: 1px solid #e6ddcc; border-radius: 14px; overflow: hidden;
+  .card { flex: none; background: #ffffff; border: 1px solid #e3e6ef; border-radius: 14px; overflow: hidden;
     box-shadow: 0 10px 28px rgba(3, 4, 90, .16); transition: opacity .22s ease, transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .2s; }
   .card.entering { opacity: 0; transform: translateX(24px); }
   .card > .head { cursor: pointer; user-select: none; }

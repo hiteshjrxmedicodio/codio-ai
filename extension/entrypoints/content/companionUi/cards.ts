@@ -49,7 +49,7 @@ export function codesCard(kind: string, icd: Code[], cpt: Code[]): string {
 }
 
 /** Asks before reading: what the review gives the provider, and what happens to identifiers (redacted in the service before any model sees the text). */
-export const PREDICTION_TITLE: Record<"icd" | "cpt" | "final", string> = { icd: "ICD-10 prediction", cpt: "CPT prediction", final: "Final codes" };
+export const PREDICTION_TITLE: Record<"icd" | "cpt" | "final", string> = { icd: "ICD-10 prediction", cpt: "CPT pipeline", final: "Final codes" };
 
 /** One prediction card: the codes and their names, with the count in the header. */
 export function predictionCard(id: "icd" | "cpt" | "final", list: Code[]): string {

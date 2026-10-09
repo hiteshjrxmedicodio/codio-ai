@@ -36,9 +36,8 @@ export interface IcdItem {
 
 /** Where coding is, shown to the provider while they wait. done/total count diagnoses within a step. */
 export interface IcdStep {
+  /** cdi: the report run's first step, shown in the CDI card rather than the ICD progress card. */
   step: "cdi" | "extract" | "params" | "codes" | "done";
-  /** Set by the report run, whose first step is CDI. */
-  withCdi?: boolean;
   label: string;
   done?: number;
   total?: number;
@@ -61,7 +60,11 @@ function toUnit(i: number, dx: Diagnosis, params: DxParameters | null, asHistory
 /** The report's own words about the diagnosis by section, plus its coding details; redacted like every model call. */
 function statementsOf(dx: Diagnosis, params: DxParameters | null): Record<string, string> {
   const statements: Record<string, string> = {};
-  for (const q of dx.quotes) statements[q.section] = statements[q.section] ? `${statements[q.section]} ${q.text}` : q.text;
+  // The engine reads the CDI-cleaned wording; the original quote is only for highlighting on the page.
+  for (const q of dx.quotes) {
+    const said = q.cleaned || q.text;
+    statements[q.section] = statements[q.section] ? `${statements[q.section]} ${said}` : said;
+  }
   if (params?.documented.length) statements["coding details"] = params.documented.map((p) => `${p.name}: ${p.value}`).join("; ");
   for (const k of Object.keys(statements)) statements[k] = redactText(statements[k] ?? "");
   return statements;

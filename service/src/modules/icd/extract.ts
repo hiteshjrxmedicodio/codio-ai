@@ -11,7 +11,8 @@ export type DxStatus = "current" | "historical" | "uncertain" | "ruled_out";
 export interface Diagnosis {
   phrase: string;
   status: DxStatus;
-  quotes: { section: string; text: string }[];
+  /** `text` exactly as on the page (for highlighting); `cleaned` the same passage after CDI (for coding). */
+  quotes: { section: string; text: string; cleaned?: string }[];
 }
 
 export interface Parameter {
@@ -34,8 +35,8 @@ export function reportText(blocks: Block[]): string {
 
 const QUOTE = {
   type: "object",
-  properties: { section: { type: "string" }, text: { type: "string" } },
-  required: ["section", "text"],
+  properties: { section: { type: "string" }, text: { type: "string" }, cleaned: { type: "string" } },
+  required: ["section", "text", "cleaned"],
 };
 
 /**
@@ -74,7 +75,7 @@ export async function extractDiagnoses(blocks: Block[], cleaned?: Block[]): Prom
 
 /** Step 2: the details that decide this diagnosis's code, and the ones the report leaves out. */
 export async function predictParameters(dx: Diagnosis, blocks: Block[]): Promise<{ params: DxParameters; usage: Usage }> {
-  const phrases = dx.quotes.map((q) => `- (${q.section}) ${q.text}`).join("\n");
+  const phrases = dx.quotes.map((q) => `- (${q.section}) ${q.cleaned || q.text}`).join("\n");
   const { data, usage } = await callBlock<DxParameters>({
     blockId: "P-DX-PARAMS",
     parts: [{ text: `DIAGNOSIS: ${dx.phrase}\nSTATUS: ${dx.status}\nPHRASES\n${phrases}\n\nREPORT\n${reportText(blocks)}` }],

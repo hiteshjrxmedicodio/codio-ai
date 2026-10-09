@@ -13,84 +13,64 @@ export function mergeCleaned(blocks: Block[], cleaned: { index: number; text: st
   return blocks.map((b, i) => ({ heading: b.heading, text: b.text.trim() ? byIndex.get(i) ?? b.text : b.text }));
 }
 
-const CHANGE_TYPES = ["spelling", "grammar", "abbreviation", "format", "removal", "structure"];
+/** `interpretation`: a pointing phrase ("as above") rewritten as the connection it makes; the provider did not write it in words. */
+export const CHANGE_KINDS = ["spelling", "abbreviation", "normalization", "interpretation", "reference", "removal", "split", "copy"] as const;
 
-/** One change preprocessing made: the text before and after. */
-export interface Correction {
+/** One edit CDI made, for its trail: where, what kind, the exact text before and after, and why. */
+export interface CdiChange {
   index: number;
-  type: string;
-  original: string;
-  corrected: string;
+  kind: (typeof CHANGE_KINDS)[number];
+  before: string;
+  after: string;
+  reason: string;
 }
 
-/** Text preprocessing left as written because the report did not settle it; the review reads these. */
-export interface Unsettled {
+/** Something CDI deliberately left as written (an unclear word, an ambiguous abbreviation, a reference it could not resolve). */
+export interface CdiFlag {
   index: number;
-  type: string;
   text: string;
   reason: string;
 }
 
+const entry = (props: Record<string, unknown>) => ({ type: "object", properties: props, required: Object.keys(props) });
+const str = { type: "string" };
+
 /**
- * Preprocessing, ported from the Codio engine's record standardization (p001_2 and the inpatient
- * p060): spelling, grammar, abbreviations, formats, administrative noise and run-on diagnoses, made
- * correct without changing meaning. It owns every writing correction, so the documentation review
- * never reports one. Diagnosis and procedure extraction read the corrected text. Each change and each
- * item left unsettled is returned. Blocks must already be redacted.
+ * The trail as it applies to the merged result: a change counts only when its block exists and was
+ * actually rewritten, so the trail never describes an edit that did not reach the cleaned text.
+ */
+export function trailFor(blocks: Block[], cleaned: Block[], changes: CdiChange[], flags: CdiFlag[]): { changes: CdiChange[]; flags: CdiFlag[] } {
+  const rewritten = (i: number) => Boolean(blocks[i] && cleaned[i] && blocks[i].text !== cleaned[i].text);
+  return { changes: changes.filter((c) => rewritten(c.index) && c.before !== c.after), flags: flags.filter((f) => Boolean(blocks[f.index]) && f.text.trim()) };
+}
+
+/**
+ * CDI, ported from the Codio engine's cleaning + CDI normalisation (p001_2): typos, abbreviations,
+ * numbers, administrative noise, run-on diagnoses and references to other items, without changing
+ * meaning, with a trail of every change. Diagnosis and
+ * procedure extraction read the cleaned text. Blocks must already be redacted.
  */
 export async function normalizeReport(
   blocks: Block[],
-): Promise<{ blocks: Block[]; corrections: Correction[]; unsettled: Unsettled[]; confidence: number; usage: Usage }> {
+): Promise<{ blocks: Block[]; confidence: number; changes: CdiChange[]; flags: CdiFlag[]; usage: Usage }> {
   const text = blocks
     .map((b, i) => (b.text.trim() ? `BLOCK ${i} | ${b.heading || "(no heading)"}\n${b.text}` : ""))
     .filter(Boolean)
     .join("\n\n");
-  const { data, usage } = await callBlock<{ blocks: { index: number; text: string }[]; corrections: Correction[]; unsettled: Unsettled[]; confidence: number }>({
+  const { data, usage } = await callBlock<{ blocks: { index: number; text: string }[]; changes: CdiChange[]; left_as_written: CdiFlag[]; confidence: number }>({
     blockId: BLOCK_ID,
     parts: [{ text: `REPORT\n${text}` }],
     schema: {
       type: "object",
       properties: {
-        blocks: {
-          type: "array",
-          items: { type: "object", properties: { index: { type: "integer" }, text: { type: "string" } }, required: ["index", "text"] },
-        },
-        corrections: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              index: { type: "integer" },
-              type: { type: "string", enum: CHANGE_TYPES },
-              original: { type: "string" },
-              corrected: { type: "string" },
-            },
-            required: ["index", "type", "original", "corrected"],
-          },
-        },
-        unsettled: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              index: { type: "integer" },
-              type: { type: "string", enum: [...CHANGE_TYPES, "clinical", "consistency"] },
-              text: { type: "string" },
-              reason: { type: "string" },
-            },
-            required: ["index", "type", "text", "reason"],
-          },
-        },
+        blocks: { type: "array", items: entry({ index: { type: "integer" }, text: str }) },
+        changes: { type: "array", items: entry({ index: { type: "integer" }, kind: { type: "string", enum: [...CHANGE_KINDS] }, before: str, after: str, reason: str }) },
+        left_as_written: { type: "array", items: entry({ index: { type: "integer" }, text: str, reason: str }) },
         confidence: { type: "number", minimum: 0, maximum: 1 },
       },
-      required: ["blocks", "corrections", "unsettled", "confidence"],
+      required: ["blocks", "changes", "left_as_written", "confidence"],
     },
   });
-  return {
-    blocks: mergeCleaned(blocks, data.blocks),
-    corrections: data.corrections ?? [],
-    unsettled: data.unsettled ?? [],
-    confidence: data.confidence,
-    usage,
-  };
+  const cleaned = mergeCleaned(blocks, data.blocks);
+  return { blocks: cleaned, confidence: data.confidence, ...trailFor(blocks, cleaned, data.changes, data.left_as_written), usage };
 }

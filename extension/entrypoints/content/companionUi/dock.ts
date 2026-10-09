@@ -2,9 +2,9 @@
  * The card stack in the top-right corner, after Clicky's menu-bar panel: compact, rounded, never
  * taking focus, the pill still free to follow the pointer (it only hides while over the stack).
  *
- * Each kind of result has its own card, in a fixed order: ICD-10 codes (permission, then each
- * diagnosis phrase with its code and trail), the documentation review, CPT predictions, the final
- * codes, and answers. Every card
+ * Each kind of result has its own card, in a fixed order: CDI (the sections it cleaned), ICD-10
+ * codes (permission, then each diagnosis phrase with its code and trail), the CPT pipeline (each
+ * procedure and its journey to a code), the documentation review, the final codes, and answers. Every card
  * always shows its header bar; at most one card is open at a time, and an open card's body has a
  * capped height that scrolls, so the stack never fills the screen. Opening a card folds the rest.
  * Folding the open card folds the whole stack into a slim strip on the right edge of the window,
@@ -13,8 +13,9 @@
  */
 import { DOCK_STYLE } from "./dockStyle";
 
-export type CardId = "icd" | "review" | "cpt" | "final" | "answer";
-const ORDER: CardId[] = ["icd", "review", "cpt", "final", "answer"];
+export type CardId = "cdi" | "icd" | "cpt" | "review" | "final" | "answer";
+/** The report run's order (CDI, then ICD-10, then the CPT pipeline), then the review and the rest. */
+const ORDER: CardId[] = ["cdi", "icd", "cpt", "review", "final", "answer"];
 const TAG = "codio-ai-dock";
 
 let host: HTMLElement | null = null;

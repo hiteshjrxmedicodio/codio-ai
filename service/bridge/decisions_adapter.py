@@ -35,12 +35,23 @@ def _post(body, key, url=API, retries=4):
     raise RuntimeError('Decisions API gave up')
 
 
+MAX_CHOICES = 255   # the Decisions API's limit per question
+CD = 'cannot_decide'
+
+
+def rounds(options, size=MAX_CHOICES):
+    """Split an over-long option set into chunks that each fit one question, every chunk keeping
+    cannot_decide, so the infections, injuries and external-causes chapters can still be asked."""
+    keys = [k for k in options if k != CD]
+    step = size - (1 if CD in options else 0)
+    return [{**{k: options[k] for k in keys[i:i + step]}, **({CD: options[CD]} if CD in options else {})}
+            for i in range(0, len(keys), step)]
+
+
 def install(R, key, model, url=API):
     """Swap the engine's question function for one that asks the Decisions API."""
 
-    def ask(state, q, _jev_key, dry):
-        if dry:
-            return {'choice': None, '_dry': True}, 0
+    def ask_once(state, q):
         name = re.sub(r'[^A-Za-z0-9_]', '_', q['key'])[:60] or 'question'
         body = {
             'model': model,
@@ -52,7 +63,28 @@ def install(R, key, model, url=API):
         answer = next((a for a in out.get('answers', []) if a.get('name') == name), None) or {}
         tokens = (out.get('usage') or {}).get('input_tokens', 0)
         if answer.get('type') == 'refusal' or answer.get('choice') not in q['options']:
-            return {'choice': 'cannot_decide', 'reason': 'decisions_refused_or_invalid'}, tokens
+            return {'choice': CD, 'reason': 'decisions_refused_or_invalid'}, tokens
         return {'choice': answer['choice'], 'confidence': answer.get('confidence'), 'probabilities': answer.get('probabilities')}, tokens
+
+    def ask(state, q, _jev_key, dry):
+        if dry:
+            return {'choice': None, '_dry': True}, 0
+        if len(q['options']) <= MAX_CHOICES:
+            return ask_once(state, q)
+        # Too many options for one question: pick within each chunk, then pick among the chunk winners.
+        winners, conf, tokens = {}, {}, 0
+        for chunk in rounds(q['options']):
+            a, t = ask_once(state, {**q, 'options': chunk})
+            tokens += t
+            if a.get('choice') not in (None, CD):
+                winners[a['choice']] = q['options'][a['choice']]
+                conf[a['choice']] = a.get('confidence')
+        if not winners:
+            return {'choice': CD, 'reason': 'no chunk had a fit'}, tokens
+        if len(winners) == 1:
+            only = next(iter(winners))
+            return {'choice': only, 'confidence': conf[only]}, tokens
+        final, t = ask_once(state, {**q, 'options': {**winners, **({CD: q['options'][CD]} if CD in q['options'] else {})}})
+        return final, tokens + t
 
     R.ask = ask

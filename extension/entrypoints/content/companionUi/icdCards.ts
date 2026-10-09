@@ -34,9 +34,8 @@ export interface IcdItem {
 }
 
 export interface IcdStep {
+  /** cdi: the report run's first step; it shows in the CDI card, not here. */
   step: "cdi" | "extract" | "params" | "codes" | "done";
-  /** The report run cleans the report (CDI) before the ICD steps. */
-  withCdi?: boolean;
   label: string;
   done?: number;
   total?: number;
@@ -44,7 +43,6 @@ export interface IcdStep {
 }
 
 const STAGES: { key: IcdStep["step"]; label: string }[] = [
-  { key: "cdi", label: "Cleaning the report (CDI)" },
   { key: "extract", label: "Finding the diagnoses" },
   { key: "params", label: "Reading coding details" },
   { key: "codes", label: "Choosing the codes" },
@@ -69,29 +67,25 @@ function slot(x: IcdItem, i: number): string {
 }
 
 /**
- * Coding while it runs. A bar with one segment per stage says where it is (CDI first when the report run
- * cleaned the report); under it every diagnosis has its own row, all running at once, and each code pops
- * into its row the moment it lands.
+ * Coding while it runs. A three-part bar says which stage it is in; under it every diagnosis has its own
+ * row, all running at once, and each code pops into its row the moment it lands.
  */
 export function icdProgressCard(s: IcdStep): string {
-  if (s.step === "cdi" || s.step === "extract") shown = new Set();
-  // The CDI stage is shown only for a run that began with it (the report run), never for ICD alone.
-  const stages = STAGES.filter((x) => x.key !== "cdi" || s.withCdi);
-  const at = s.step === "done" ? stages.length : stages.findIndex((x) => x.key === s.step);
-  const bar = stages.map((_, i) => `<span class="seg${i < at ? " done" : i === at ? " now" : ""}"></span>`).join("");
+  if (s.step === "extract") shown = new Set();
+  // CDI ran before these steps in its own card; here the bar covers the three ICD stages only.
+  const at = s.step === "done" ? STAGES.length : STAGES.findIndex((x) => x.key === s.step);
+  const bar = STAGES.map((_, i) => `<span class="seg${i < at ? " done" : i === at ? " now" : ""}"></span>`).join("");
   const items = s.items ?? [];
   const active = items.filter((x) => x.state !== "skipped");
   const landed = active.filter((x) => x.state === "done" || x.state === "failed").length;
   const title =
-    s.step === "cdi" ? "Cleaning the report…"
-    : s.step === "extract" ? "Finding the diagnoses…"
+    s.step === "extract" ? "Finding the diagnoses…"
     : s.step === "params" ? `Reading details for ${active.length} diagnos${active.length === 1 ? "is" : "es"} at once`
     : `Coding ${active.length} diagnos${active.length === 1 ? "is" : "es"} in parallel`;
   const read = active.filter((x) => x.state !== "reading").length;
   const sub =
     s.step === "codes" ? `${landed} of ${active.length} coded`
     : s.step === "params" ? `${read} of ${active.length} read`
-    : s.step === "cdi" ? "Typos, abbreviations and run-on diagnoses, before anything is coded"
     : "Reading the report";
   const rows = items.length
     ? items.map((x, i) => `<div class="lr ${x.state}"><span class="ind"></span><span class="ph" title="${esc(x.phrase)}">${esc(x.phrase)}</span>${slot(x, i)}</div>`).join("")

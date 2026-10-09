@@ -106,6 +106,7 @@ const ConfigSchema = z.object({
     history_candidates: z.number().int().positive(),
     param_concurrency: z.number().int().positive(),
   }),
+  report_run: z.object({ icd: z.boolean(), cpt: z.boolean() }),
   cpt_pipeline: z.object({
     select_provider: z.enum(["openai_decisions", "gemini"]),
     attempted_modifier: z.string(),

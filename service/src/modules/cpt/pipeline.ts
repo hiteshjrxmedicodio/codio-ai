@@ -23,6 +23,21 @@ export interface CodedProcedure extends Procedure {
   topScore: number;
   /** Why the procedure was not sent to selection. */
   skipped?: string;
+  /** What selection chose for it, before dedup and the gate. */
+  selection?: { code: string; confidence: number; rationale: string; source: string };
+  /** Where its journey ended, for the provider's trail. */
+  outcome?: "coded" | "merged" | "below_gate" | "not_chosen" | "skipped";
+}
+
+/** Each procedure's last step: its code made the final list, lost to the same code elsewhere, fell under the gate, or never got a code. */
+function outcomeOf(p: CodedProcedure, final: CptCode[], gate: number): CodedProcedure["outcome"] {
+  if (p.skipped) return "skipped";
+  const sel = p.selection;
+  if (!sel) return "not_chosen";
+  const kept = final.find((c) => c.code === sel.code);
+  if (kept) return kept.procedure === p.procedure_text ? "coded" : "merged";
+  // A discontinued procedure's code is never gated, so it is always in the final list.
+  return sel.confidence < gate ? "below_gate" : "merged";
 }
 
 export interface CptResult {
@@ -74,10 +89,14 @@ export async function predictCpt(raw: Block[]): Promise<CptResult> {
   });
 
   const items: ToCode[] = procedures.flatMap((p, index) => (p.skipped ? [] : [{ index, proc: p, candidates: p.candidates }]));
-  if (!items.length) return { status, extraction, procedures, codes: [], usage };
+  if (!items.length) return { status, extraction, procedures: procedures.map((p) => ({ ...p, outcome: "skipped" as const })), codes: [], usage };
 
   const { selections, usage: u2 } = await selectCodes(items, reportText(blocks).slice(0, cfg.report_max_chars));
   usage.push(...u2);
+  for (const s of selections) {
+    const p = procedures[s.index];
+    if (p) p.selection = { code: s.code, confidence: s.confidence, rationale: s.rationale, source: s.source };
+  }
   const codes = selections.map((s) => ({
     code: s.code,
     modifier: procedures[s.index]?.attempted ? cfg.attempted_modifier : "",
@@ -86,5 +105,7 @@ export async function predictCpt(raw: Block[]): Promise<CptResult> {
     reason: s.rationale,
     procedure: procedures[s.index]?.procedure_text ?? "",
   }));
-  return { status, extraction, procedures, codes: finalize(codes, cfg.gate_threshold, cfg.attempted_modifier), usage };
+  const final = finalize(codes, cfg.gate_threshold, cfg.attempted_modifier);
+  for (const p of procedures) p.outcome = outcomeOf(p, final, cfg.gate_threshold);
+  return { status, extraction, procedures, codes: final, usage };
 }

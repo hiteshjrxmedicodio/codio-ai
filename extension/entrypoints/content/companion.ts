@@ -8,13 +8,13 @@
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import { closeIssue, openIssue, refreshIssue } from "./issueCard";
 import * as card from "./companionUi/cards";
-import { icdDetailCard, icdListCard, icdProgressCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
+import { icdDetailCard, icdListCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
 import { follow, isCoding, startCoding, type CodedReport } from "./reportJobs";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
-import { cptCardHtml, type CptCard } from "./reportRun";
+import { renderRun, runAction, type RunView } from "./reportRun";
 import { answerByVoice } from "./voiceQuestion";
 
 export { consent };
@@ -27,8 +27,8 @@ interface Report {
   coverage: { reachedEnd: boolean; steps: number; method: string };
   /** Each diagnosis with the phrases that state it, its code and the trail to that code. */
   icd?: { diagnoses: CodedDiagnosis[]; engineError?: string };
-  /** The procedures' CPT codes from the same run. */
-  cpt?: CptCard;
+  /** The same run's CDI (sections it cleaned) and CPT pipeline (procedures and their journeys). */
+  run?: RunView;
   /** The documentation check, run when the provider asks for it from the ICD card. */
   checked: boolean;
   suggestions: card.Suggestion[];
@@ -104,6 +104,7 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
   if (!btn) return;
   const action = btn.dataset.action;
   const index = Number(btn.dataset.index);
+  if (runAction(action, index, report?.run, show)) return;
   if (action === "copy") {
     try {
       await navigator.clipboard.writeText(btn.dataset.code ?? "");
@@ -115,7 +116,7 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
   else if (action === "deny") {
     remember("declined");
     pendingQuestion = null;
-    dock.removeCard("icd");
+    dock.removeCard("cdi");
   } else if (action === "dx") pickDiagnosis(index);
   else if (action === "icd-back") {
     viewingDx = null;
@@ -133,8 +134,8 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
 // ── Report: permission, reading, ICD codes over the report ─────────────────
 /** Turn into the permission question, unless something else is on screen or the provider already answered. */
 export function offerPermission(): void {
-  if (!on || view.isCard() || dock.hasCard("icd") || report) return;
-  show(card.permissionCard(), "icd");
+  if (!on || view.isCard() || dock.hasCard("cdi") || report) return;
+  show(card.permissionCard(), "cdi");
 }
 
 /**
@@ -287,7 +288,7 @@ function present(r: Report): void {
   marked = null;
   mark("icd");
   renderIcd();
-  if (report.cpt) show(cptCardHtml(report.cpt), "cpt", false);
+  if (report.run) renderRun(show, report.run);
   if (report.checked) renderReview(false);
 }
 
@@ -307,21 +308,22 @@ async function readReport(reuse = false): Promise<void> {
   try {
     if (!isCoding(key)) {
       const saved = reuse ? await send<Remembered | null>({ type: "report:recall", key }).catch(() => null) : null;
-      const usable = saved?.report?.icd ? saved : null;
-      show(card.loadingCard("Medical coding", usable ? "Bringing back your codes…" : "Reading the whole report…"), "icd");
+      const usable = saved?.report?.icd || saved?.report?.run ? saved : null;
+      show(card.loadingCard("Medical coding", usable ? "Bringing back your codes…" : "Reading the whole report…"), "cdi");
       const page = await readWholeReport(MAX_SCROLL_STEPS);
       if (!here()) return;
       const print = await fingerprint(page.blocks);
       if (usable?.fingerprint === print) return void ((fp = print), present(usable.report));
-      if (usable) show(card.loadingCard("Medical coding", "The report changed since last time. Coding it again…"), "icd");
+      if (usable) show(card.loadingCard("Medical coding", "The report changed since last time. Coding it again…"), "cdi");
       remember("allowed");
       // A job for this page may have started while the report was read (a second click): follow that one.
       const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
       if (!isCoding(key)) startCoding(key, { title: document.title, blocks: page.blocks, coverage, fingerprint: print });
     }
-    // The job is the report run: its CPT card fills alongside the ICD card.
-    showPrediction("cpt", null);
-    const r = await follow(key, (step) => here() && show(icdProgressCard(step), "icd"));
+    // The job is the report run: CDI's card fills first, then the ICD-10 and CPT cards as each part lands.
+    const r = await follow(key, (html, where) => {
+      if (here()) show(html, where, false);
+    });
     if (!r || !here()) return; // Left the report: the job saved its own codes for when the provider is back.
     fp = r.fingerprint;
     present(fromCoded(r));
@@ -330,8 +332,8 @@ async function readReport(reuse = false): Promise<void> {
     if (q) void askByVoice(q);
   } catch (err) {
     if (here()) {
-      show(card.messageCard("Medical coding", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
-      dock.removeCard("cpt");
+      show(card.messageCard("Medical coding", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "cdi");
+      for (const id of ["icd", "cpt"] as const) dock.removeCard(id);
     }
   }
 }
@@ -377,7 +379,7 @@ export function companionOff(): void {
 /** The provider left the report (a single-page app changed its address): its highlights and cards go with it. */
 export function leaveReport(): void {
   clearAnnotations();
-  for (const id of ["icd", "review", "answer"] as const) dock.removeCard(id);
+  for (const id of ["cdi", "icd", "cpt", "review", "answer"] as const) dock.removeCard(id);
   report = pendingQuestion = viewing = viewingDx = marked = null;
 }
 

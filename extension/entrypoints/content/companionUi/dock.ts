@@ -50,12 +50,14 @@ function expand(id: CardId | null): void {
   fold(id === null);
 }
 
-/** The strip stands in for the stack while folded; it shows how many cards wait behind it. */
+/** The strip stands in for the stack while folded; with several cards behind it, it says how many. */
 function fold(folded: boolean): void {
   const n = stack?.querySelectorAll(".card").length ?? 0;
   host?.classList.toggle("folded", folded && n > 0);
   if (strip) {
-    strip.querySelector(".n")!.textContent = String(n);
+    const count = strip.querySelector<HTMLElement>(".n")!;
+    count.textContent = String(n);
+    count.hidden = n < 2;
     strip.setAttribute("aria-label", `Show Codio AI's ${n} card${n === 1 ? "" : "s"}`);
     strip.classList.remove("updated");
   }

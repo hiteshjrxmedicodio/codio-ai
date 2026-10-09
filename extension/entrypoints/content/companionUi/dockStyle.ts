@@ -16,6 +16,7 @@ export const DOCK_STYLE = `
   .strip:hover { background: #00309f; transform: translateX(-2px); }
   .strip:focus-visible { outline: 2px solid #5b8cff; outline-offset: 2px; }
   .strip .vt { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .06em; white-space: nowrap; }
+  .strip .n[hidden] { display: none; }
   .strip .n { min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #fff; color: #03045a; font-size: 10px; line-height: 16px; text-align: center; }
   .strip.updated .dot { animation: ping 1.4s ease-out; }
   .stack { box-sizing: border-box; width: 357px; max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;

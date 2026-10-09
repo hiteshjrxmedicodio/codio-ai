@@ -194,6 +194,16 @@ icd_pipeline:
 # (OpenAI embedding, optional dense + BM25 rerank) → one code per procedure. Ported from the
 # Codio engine's procedure extraction (P022) and final selection (P023, Pinecone path).
 # P-CPT-SELECT is the instructions for the Decisions API and for the Gemini fallback alike.
+# Sections that are history, not this encounter. Nothing under these headings is coded (ICD-10, CPT) or
+# reviewed (CDI suggestions); CDI cleaning still reads them so the page's text stays whole. Matched on
+# the heading only, case-insensitively, as the whole heading or one of its words; a bare "history" only
+# as the whole heading. The History of Present Illness (HPI) is the encounter and is always kept.
+# past_history is the section map's canonical name for all of these.
+history_sections:
+  enabled: true
+  headings: [past medical history, past surgical history, past history, medical history, surgical history,
+    family history, social history, pmh, psh, fh, fhx, sh, shx, history]
+
 # What "Code it" runs after CDI. Turn ICD-10 and/or the CPT pipeline off to test CDI alone; the run
 # then stops after CDI and the companion shows only the cards that ran.
 report_run:

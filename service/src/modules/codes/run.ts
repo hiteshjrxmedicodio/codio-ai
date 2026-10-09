@@ -1,5 +1,6 @@
 import { getConfig } from "../../core/config";
 import { redactBlocks } from "../../core/privacy/redact";
+import { isHistorySection } from "../../core/sections";
 import type { Usage } from "../../core/types";
 import { normalizeReport, type CdiChange, type CdiFlag } from "../cdi/normalize/normalize";
 import { predictCpt, type CptResult } from "../cpt/pipeline";
@@ -19,7 +20,7 @@ const failed = (err: unknown) => ({ error: err instanceof Error ? err.message : 
 
 /**
  * One report run: CDI cleans the report, then diagnoses → ICD-10-CM and procedures → CPT read the
- * cleaned text. The two coding paths depend only on CDI, so they run side by side. A CDI failure
+ * cleaned text, without its history sections. The two coding paths depend only on CDI, so they run side by side. A CDI failure
  * passes the original report on; a coding failure is returned for its own card, never thrown.
  */
 export async function runCodes(
@@ -42,12 +43,16 @@ export async function runCodes(
 
   // CDI's card can fill now; ICD and CPT each report the moment they settle, not when both do.
   onPart("cdi", cdi);
+  // History sections are not this encounter: neither coding path reads them (core/sections.ts).
+  const keep = blocks.map((b) => !isHistorySection(b.heading));
+  const coded = blocks.filter((_, i) => keep[i]);
+  const codedClean = cdi.blocks.filter((_, i) => keep[i]);
   const report = <T>(key: "icd" | "cpt", r: T) => (onPart(key, r), r);
   const on = getConfig().report_run;
   const off = (key: "icd" | "cpt") => Promise.resolve({ skipped: `Turned off (report_run.${key} in config.yaml)` });
   const [icd, cpt] = await Promise.all([
-    (on.icd ? predictIcd(blocks, onStep, cdi.blocks).catch(failed) : off("icd")).then((r) => report("icd", r)),
-    (on.cpt ? predictCpt(cdi.blocks).catch(failed) : off("cpt")).then((r) => report("cpt", r)),
+    (on.icd ? predictIcd(coded, onStep, codedClean).catch(failed) : off("icd")).then((r) => report("icd", r)),
+    (on.cpt ? predictCpt(codedClean).catch(failed) : off("cpt")).then((r) => report("cpt", r)),
   ]);
   if ("usage" in icd) usage.push(...icd.usage);
   if ("usage" in cpt) usage.push(...cpt.usage);

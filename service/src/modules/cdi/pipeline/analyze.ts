@@ -1,5 +1,6 @@
 import { getConfig } from "../../../core/config";
 import { redactBlocks } from "../../../core/privacy/redact";
+import { withoutHistory } from "../../../core/sections";
 import { mapLimit } from "../../../core/limit";
 import type { AnalyzeResult, BlockError, CareSetting, Finding, Section, Suggestion, Usage } from "../../../core/types";
 import { FINDERS } from "../finders";
@@ -20,7 +21,8 @@ import { mergeDuplicates, rankAndCap } from "./rank";
  */
 export async function analyzeNote(raw: Section[], setting: CareSetting): Promise<AnalyzeResult> {
   // Privacy: identifiers are removed before any check reads the note.
-  const sections = redactBlocks(raw.map((s) => ({ heading: s.name, name: s.name, text: s.text }))).map(({ name, text }) => ({ name, text }));
+  // History sections (past medical, surgical, family, social history) are not this encounter: not reviewed.
+  const sections = withoutHistory(redactBlocks(raw.map((s) => ({ heading: s.name, name: s.name, text: s.text }))).map(({ name, text }) => ({ name, text })));
   const started = Date.now();
   const cfg = getConfig().pipeline;
   const usage: Usage[] = [];
@@ -51,7 +53,7 @@ export async function analyzeNote(raw: Section[], setting: CareSetting): Promise
   );
 
   // Quotes must match the page as written, so highlights land; one only the corrected note holds is still kept.
-  const restored = restoreQuotes(finderRuns.flat(), sections, pre.corrections);
+  const restored = restoreQuotes(finderRuns.flat(), sections, pre.changes);
   const onPage = checkQuotes(restored, sections);
   const corrected = checkQuotes(onPage.dropped.map((d) => d.finding), pre.sections);
   const kept = [...onPage.kept, ...corrected.kept];

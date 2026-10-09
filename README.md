@@ -148,7 +148,10 @@ whose line names the condition is a candidate, and the Decisions API picks one (
 `icd_pipeline.history_candidates`); only a diagnosis nothing in the tabular names goes to the engine, walked as written and
 as personal history, and lands in review with both codes when neither walk reaches a history form. A chronic condition
 listed under a history heading is extracted as current. Ruled-out and uncertain diagnoses are listed but not coded
-(`icd_pipeline.include_statuses`). Each result carries
+(`icd_pipeline.include_statuses`). **History sections** (past medical, past surgical, family and social history, the
+list in `history_sections`) are never coded or reviewed: ICD-10, CPT and the documentation check read the report
+without them (`core/sections.ts`), while CDI cleaning still covers them so the page stays whole. A past condition the
+provider names in the encounter's own sections is still coded, as history. Each result carries
 `trail` (the engine's path, grouped for display) so the companion can show how the code was reached.
 The companion runs it as a job (`POST /v1/icd/jobs`, then `GET /v1/icd/jobs/:id`) and shows which step it is on:
 finding diagnoses, reading coding details (n of N), choosing codes (n of N, one tick per diagnosis the engine finishes).

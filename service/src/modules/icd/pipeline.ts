@@ -4,6 +4,7 @@ import { mapLimit } from "../../core/limit";
 import { redactBlocks, redactText } from "../../core/privacy/redact";
 import type { Usage } from "../../core/types";
 import { extractDiagnoses, predictParameters, type Block, type Diagnosis, type DxParameters } from "./extract";
+import { HISTORY_NOTE, asHistoryPhrase, baseUid, codeHistory, historyUid, pickHistory } from "./history";
 import { runJev, type JevResult, type JevTrail, type JevUnit } from "./jev";
 
 export const PredictBodySchema = z.object({
@@ -45,20 +46,32 @@ export interface IcdStep {
   items?: IcdItem[];
 }
 
-/** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
-function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit {
+/**
+ * The engine's state: the diagnosis, its own phrases by section, and the documented parameters. A
+ * historical diagnosis gets two units (history.ts): as written, and as personal history.
+ */
+function toUnit(i: number, dx: Diagnosis, params: DxParameters | null, asHistory = false): JevUnit {
+  const history = dx.status === "historical";
+  const phrase = asHistory ? asHistoryPhrase(dx.phrase) : dx.phrase;
+  const statements = statementsOf(dx, params);
+  if (history) statements["status"] = redactText(HISTORY_NOTE);
+  return { uid: asHistory ? historyUid(`dx${i}`) : `dx${i}`, phrase: redactText(phrase), state: { diagnosis: { phrase: redactText(phrase), is_active: !history }, statements } };
+}
+
+/** The report's own words about the diagnosis by section, plus its coding details; redacted like every model call. */
+function statementsOf(dx: Diagnosis, params: DxParameters | null): Record<string, string> {
   const statements: Record<string, string> = {};
   for (const q of dx.quotes) statements[q.section] = statements[q.section] ? `${statements[q.section]} ${q.text}` : q.text;
   if (params?.documented.length) statements["coding details"] = params.documented.map((p) => `${p.name}: ${p.value}`).join("; ");
-  // Privacy: everything sent to Jev is redacted, the same as every model call.
   for (const k of Object.keys(statements)) statements[k] = redactText(statements[k] ?? "");
-  return { uid: `dx${i}`, phrase: redactText(dx.phrase), state: { diagnosis: { phrase: redactText(dx.phrase), is_active: dx.status === "current" }, statements } };
+  return statements;
 }
 
 /**
  * Report → diagnoses with the exact phrases that state them → coding parameters per diagnosis →
- * ICD-10-CM code per diagnosis from the Jev engine. Diagnoses whose status is not coded (history,
- * ruled out, uncertain by default) are returned without a code so the provider still sees them.
+ * ICD-10-CM code per diagnosis from the Jev engine. Current and historical diagnoses are coded (history
+ * in its personal-history or old/sequela form); statuses left out of `include_statuses` (ruled out and
+ * uncertain by default) are returned without a code so the provider still sees them.
  */
 export async function predictIcd(
   raw: Block[],
@@ -102,19 +115,43 @@ export async function predictIcd(
     }
   });
 
-  const units = diagnoses.map((dx, i) => (coded[i] ? toUnit(i, dx, params[i] ?? null) : null)).filter((u): u is JevUnit => u !== null);
+  const codesLabel = "Choosing the ICD-10 codes";
+  let landed = 0;
+  for (const x of items) if (x.state !== "skipped") x.state = "coding";
+  onStep({ step: "codes", label: codesLabel, done: 0, total: toCode, items: snapshot() });
+
+  // History first, straight from the tabular's history-form codes; what it cannot place goes to the engine.
+  const direct = new Map<number, JevResult>();
+  await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
+    if (!coded[i] || dx.status !== "historical") return;
+    const r = await codeHistory(`dx${i}`, dx, statementsOf(dx, params[i] ?? null)).catch(() => null);
+    if (!r) return;
+    direct.set(i, r);
+    Object.assign(items[i] as IcdItem, { state: "done", code: r.code });
+    onStep({ step: "codes", label: codesLabel, done: ++landed, total: toCode, items: snapshot() });
+  });
+
+  const units: JevUnit[] = [];
+  diagnoses.forEach((dx, i) => {
+    if (!coded[i] || direct.has(i)) return;
+    units.push(toUnit(i, dx, params[i] ?? null));
+    if (dx.status === "historical") units.push(toUnit(i, dx, params[i] ?? null, true));
+  });
   let results: JevResult[] = [];
   let engineError: string | undefined;
+  // A historical diagnosis the engine walked is done when both its walks are; its code is the pick of the two.
+  const resultFor = (i: number, by: Map<string, JevResult>): JevResult | undefined =>
+    direct.get(i) ?? (diagnoses[i]?.status === "historical" ? pickHistory(by.get(`dx${i}`), by.get(historyUid(`dx${i}`)), diagnoses[i]?.phrase ?? "") : by.get(`dx${i}`));
   if (units.length) {
     try {
-      const codesLabel = "Choosing the ICD-10 codes";
-      let landed = 0;
-      for (const x of items) if (x.state !== "skipped") x.state = "coding";
-      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length, items: snapshot() });
-      results = await runJev(units, (uid, code) => {
-        const item = items[Number(uid.slice(2))];
-        if (item) Object.assign(item, { state: "done", code });
-        onStep({ step: "codes", label: codesLabel, done: ++landed, total: units.length, items: snapshot() });
+      const partial = new Map<string, JevResult>();
+      results = await runJev(units, (uid, code, description) => {
+        partial.set(uid, { uid, code, description });
+        const i = Number(baseUid(uid).slice(2));
+        const item = items[i];
+        if (!item || (diagnoses[i]?.status === "historical" && !(partial.has(`dx${i}`) && partial.has(historyUid(`dx${i}`))))) return;
+        Object.assign(item, { state: "done", code: resultFor(i, partial)?.code ?? null });
+        onStep({ step: "codes", label: codesLabel, done: ++landed, total: toCode, items: snapshot() });
       });
     } catch (err) {
       engineError = String(err instanceof Error ? err.message : err);
@@ -125,7 +162,7 @@ export async function predictIcd(
 
   return {
     diagnoses: diagnoses.map((dx, i) => {
-      const r = byUid.get(`dx${i}`);
+      const r = resultFor(i, byUid);
       const reason = !coded[i] ? `Not coded: ${dx.status.replace("_", " ")}` : engineError ?? r?.error ?? r?.handoff?.reason ?? paramsErrors[i] ?? null;
       return {
         ...dx,

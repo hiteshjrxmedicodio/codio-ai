@@ -15,7 +15,7 @@ REASONING
 2. Find every condition, disease, injury, symptom or finding the report attributes to the patient.
 3. Merge mentions of the same condition into one diagnosis, even when they appear in several sections.
 4. For each diagnosis, find every phrase that states or describes it and copy it exactly as written in the original report, with the heading it appears under.
-5. Decide for each diagnosis whether the report presents it as current, historical, uncertain or ruled out.
+5. Decide for each diagnosis whether the report presents it as current, historical, uncertain or ruled out. Historical means the condition is over: resolved, treated and gone, or no longer present. A chronic condition that is still present, still treated or still affecting care is current even when it is listed under a past history heading or introduced with the words history of.
 6. Name each diagnosis in a short clinical phrase taken from the report's own wording.
 
 GUARDS

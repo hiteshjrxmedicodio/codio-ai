@@ -51,6 +51,7 @@ decision_blocks:
   D-SCREEN-INC:  { prompt: decisions/p_screen_unaddressed.txt }
   D-SCREEN-WRD:  { prompt: decisions/p_screen_wording.txt }
   D-PICK-CONTROL: { prompt: decisions/p_pick_control.txt }
+  D-PICK-HISTORY: { prompt: decisions/p_pick_history.txt }
   D-SELECT-KIND:  { prompt: decisions/p_select_kind.txt }
   D-PICK-SECTION: { prompt: decisions/p_pick_section.txt }
 
@@ -182,7 +183,10 @@ icd_pipeline:
   gemini_fallback: true
   gemini_model: gemini-3.8-flash
   timeout_ms: 300000
-  include_statuses: [current]       # which extracted statuses go on to coding
+  # Which extracted statuses go on to coding. A historical diagnosis is coded in its personal-history
+  # (or old / sequela) form; uncertain and ruled-out ones are listed but never coded.
+  include_statuses: [current, historical]
+  history_candidates: 8             # history-form codes from the tabular offered to the pick for a historical diagnosis
   param_concurrency: 6
 
 # Report → procedures (with completion status) → CPT candidates per procedure from Pinecone

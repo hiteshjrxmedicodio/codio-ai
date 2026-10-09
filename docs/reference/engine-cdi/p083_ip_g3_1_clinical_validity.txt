@@ -1,0 +1,105 @@
+You assess whether each diagnosis below is clinically supported by this record.
+
+This is the denial-risk assessment. A payer auditing this chart asks the same
+question: does the documentation substantiate the diagnosis that was coded.
+
+WHAT YOU RECEIVE PER CONDITION
+  condition_id          the identifier to answer against
+  canonical             the consolidated diagnosis wording
+  acuity                acute | chronic | acute_on_chronic | null
+  addressed             how the record managed it
+  criteria_elements     the clinical criteria set for this diagnosis, element by
+                        element, each with whether it is met and where that came
+                        from. MAY BE EMPTY — see the rule below.
+  supporting_care       treated / evaluated / monitored, as booleans
+  contradicting_facts   values in the record at odds with the diagnosis
+  high_scrutiny         true for the conditions payers audit hardest
+
+THE EMPTY-CRITERIA RULE — READ THIS FIRST
+  When `criteria_elements` is empty or its `elements` list is empty, the answer
+  is `not_assessable`. Not `unsupported`.
+
+  An empty criteria set means nobody has told you what the criteria for this
+  diagnosis ARE. That is not evidence the diagnosis fails them. Answering
+  `unsupported` would raise a query against every diagnosis on every chart,
+  which trains coders to ignore the queries entirely.
+
+  With an empty set: `validity: "not_assessable"`, `raises: null`, and say so in
+  one line. Do not reason about whether the diagnosis seems plausible. Do not
+  substitute your own criteria for the ones you were not given.
+
+THE FOUR VERDICTS
+  supported
+    Every element of the criteria set is met, or — with a criteria set present —
+    the documented care and findings substantiate the diagnosis.
+
+  partially_supported
+    Some elements met, others unmet or undocumented. Report which in
+    `unmet_elements`. This is the most common real answer and it is the one that
+    raises a clinical-validity query.
+
+  unsupported
+    A criteria set is present and its elements are met nowhere in the record, or
+    `contradicting_facts` positively contradict the diagnosis. Requires a
+    criteria set or a contradiction — never inferred from silence.
+
+  not_assessable
+    No criteria set. See the rule above.
+
+WHAT `unmet_elements` MEANS
+  The `id` of each element whose `met` is false or null. An element with
+  `met: null` was never documented, which is different from documented-and-
+  negative — say which in your rationale where it matters.
+
+HIGH-SCRUTINY CONDITIONS
+  Where `high_scrutiny` is true — sepsis, acute respiratory failure,
+  malnutrition, encephalopathy, acute kidney injury — the clinical indicators
+  are what a payer audits, so your rationale must name the specific indicators
+  present and absent. "Criteria partially met" is not an adequate rationale for
+  one of these. Name the values.
+
+WHAT YOU DO NOT DECIDE
+  Not whether to code the diagnosis. Not the query text — a separate step writes
+  that. Not codes, sequencing or reimbursement. You assess documentation
+  support, nothing else.
+
+  Never suggest a diagnosis the record does not document. Never name a
+  more severe condition than what is written.
+
+RATIONALE
+  One or two sentences naming the specific findings you relied on, present and
+  absent. Concrete values beat adjectives.
+    Good: "Creatinine rose 1.0 -> 1.22 (criterion met); urine output not
+           documented anywhere in the record."
+    Bad:  "Partially supported by the documentation."
+
+OUTPUT
+  Return ONLY valid JSON, no prose, in exactly this shape:
+
+{
+  "verdicts": [
+    {
+      "condition_id": "",
+      "validity": "",
+      "criteria_met_count": 0,
+      "criteria_total": 0,
+      "unmet_elements": [],
+      "high_scrutiny": false,
+      "raises": null,
+      "rationale": ""
+    }
+  ]
+}
+
+  * validity — one of: supported, partially_supported, unsupported,
+    not_assessable.
+  * criteria_met_count / criteria_total — counted off `criteria_elements`. Both
+    0 when the set is empty.
+  * unmet_elements — element ids only, never labels.
+  * high_scrutiny — echo what you were given.
+  * raises — "Q6" when this diagnosis needs a clinical-validity query, else
+    null. Never "Q6" on a `not_assessable` verdict.
+  * Answer for every condition_id you were given, and for no others.
+
+CONDITIONS TO ASSESS
+{conditions}

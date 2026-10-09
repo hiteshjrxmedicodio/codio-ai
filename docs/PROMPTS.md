@@ -37,6 +37,7 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-CPT-SELECT | `coding/p_cpt_select.txt` | Choice per procedure: which retrieved CPT candidate matches it | `modules/cpt/select.ts` |
 | D-SELECT-KIND | `decisions/p_select_kind.txt` | Choice: is highlighted text a diagnosis, a procedure, both or neither | `modules/selection/codeSelection.ts` |
 | D-PICK-CONTROL | `decisions/p_pick_control.txt` | Choice: which visible control moves toward the goal | `modules/agent/pickControl.ts` |
+| D-PICK-HISTORY | `decisions/p_pick_history.txt` | Choice: which history-form ICD-10-CM code names a historical diagnosis | `modules/icd/history.ts` |
 | D-PICK-SECTION | `decisions/p_pick_section.txt` | Choice: which dictated section belongs in the clicked field | `modules/dictation/dictation.ts` |
 
 ## Inversion notes (author's working list, not in the prompts)
@@ -59,6 +60,7 @@ login walls), and Decisions API guidance (refusals are not false; confidence nee
 | P-FIX | new clinical content · payment pressure · preferred answers · add-only questions · length |
 | D-SCREEN-* | missing a real problem costs more than a wasted finder run, so lean high |
 | D-PICK-CONTROL | terse or repeated labels · links out of the app · menus as the next step · weak matches |
+| D-PICK-HISTORY | near-miss conditions in the same system · entries asserting an undocumented type · own-chapter old/sequela forms · none over a near miss |
 | D-PICK-SECTION | abbreviated labels · partial or combined fields · non-clinical fields · weak matches |
 | P-READ-SCREEN | interface chrome · altering small words and numbers · table pairs · column order · several notes · guessing blurred text |
 | P-READ-MAP | vendor heading names · wrong template headings · several notes captured · addenda · text split across screens |

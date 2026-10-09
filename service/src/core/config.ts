@@ -103,6 +103,7 @@ const ConfigSchema = z.object({
     gemini_model: z.string(),
     timeout_ms: z.number().int().positive(),
     include_statuses: z.array(z.enum(["current", "historical", "uncertain", "ruled_out"])).min(1),
+    history_candidates: z.number().int().positive(),
     param_concurrency: z.number().int().positive(),
   }),
   cpt_pipeline: z.object({

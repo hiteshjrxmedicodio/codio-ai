@@ -126,7 +126,7 @@ def main():
         # One PROGRESS line on stderr per finished diagnosis, so the provider sees how far coding is.
         out = run(u)
         with lock:
-            sys.stderr.write('PROGRESS ' + json.dumps({'uid': out['uid'], 'code': out.get('code')}) + '\n')
+            sys.stderr.write('PROGRESS ' + json.dumps({'uid': out['uid'], 'code': out.get('code'), 'description': out.get('description')}) + '\n')
             sys.stderr.flush()
         return out
 

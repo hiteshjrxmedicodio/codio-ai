@@ -1,12 +1,12 @@
 import { redactBlocks } from "../../core/privacy/redact";
 import type { Usage } from "../../core/types";
-import { normalizeReport } from "../cdi/normalize/normalize";
+import { normalizeReport, type Correction, type Unsettled } from "../cdi/normalize/normalize";
 import { predictCpt, type CptResult } from "../cpt/pipeline";
 import type { Block } from "../icd/extract";
 import { predictIcd, type IcdStep } from "../icd/pipeline";
 
 export interface CodesRun {
-  cdi: { blocks: Block[]; confidence: number; error?: string };
+  cdi: { blocks: Block[]; corrections: Correction[]; unsettled: Unsettled[]; confidence: number; error?: string };
   icd: Awaited<ReturnType<typeof predictIcd>> | { error: string };
   cpt: CptResult | { error: string };
   usage: Usage[];
@@ -30,9 +30,9 @@ export async function runCodes(raw: Block[], onStep: (s: IcdStep) => void = () =
   try {
     const r = await normalizeReport(blocks);
     usage.push(r.usage);
-    cdi = { blocks: r.blocks, confidence: r.confidence };
+    cdi = { blocks: r.blocks, corrections: r.corrections, unsettled: r.unsettled, confidence: r.confidence };
   } catch (err) {
-    cdi = { blocks, confidence: 0, error: failed(err).error };
+    cdi = { blocks, corrections: [], unsettled: [], confidence: 0, error: failed(err).error };
   }
 
   const [icd, cpt] = await Promise.all([predictIcd(blocks, step, cdi.blocks).catch(failed), predictCpt(cdi.blocks).catch(failed)]);

@@ -142,7 +142,13 @@ engine in `~/Desktop/jev_icd_engine` (CMS index search, tree walk, Excludes/see 
 through `service/bridge/jev_bridge.py` (`POST /v1/icd/predict`, configured under `icd_pipeline`). The engine's
 pick-one questions are answered by the **OpenAI Decisions API** (`bridge/decisions_adapter.py`, provider
 `decisions`, the default) or by Jev (provider `jev`, needs `TYPESAFE_API_KEY`). The engine folder is never edited.
-Everything sent is redacted first. History, ruled-out and uncertain diagnoses are listed but not coded. Each result carries
+Everything sent is redacted first. Current and historical diagnoses are coded. A historical diagnosis is coded directly
+(`modules/icd/history.ts`): every history-form code in the CMS tabular (personal history, status, old, healed, sequela)
+whose line names the condition is a candidate, and the Decisions API picks one (`D-PICK-HISTORY`, up to
+`icd_pipeline.history_candidates`); only a diagnosis nothing in the tabular names goes to the engine, walked as written and
+as personal history, and lands in review with both codes when neither walk reaches a history form. A chronic condition
+listed under a history heading is extracted as current. Ruled-out and uncertain diagnoses are listed but not coded
+(`icd_pipeline.include_statuses`). Each result carries
 `trail` (the engine's path, grouped for display) so the companion can show how the code was reached.
 The companion runs it as a job (`POST /v1/icd/jobs`, then `GET /v1/icd/jobs/:id`) and shows which step it is on:
 finding diagnoses, reading coding details (n of N), choosing codes (n of N, one tick per diagnosis the engine finishes).

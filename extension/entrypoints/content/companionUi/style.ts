@@ -1,7 +1,6 @@
 /** Card contents (header, rows, buttons), shared by the pointer card and the docked card. */
 export const CARD_BODY_STYLE = `
   .head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: #03045a; color: #fff; font-weight: 600; font-size: 12px; }
-  .head .x { margin-left: auto; background: none; border: 0; color: #c9ccf2; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
   .body { padding: 9px 11px 11px; display: grid; gap: 8px; }
   .muted { color: #7b7365; font-size: 12px; }
   .group { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #7b7365; }
@@ -29,7 +28,10 @@ export const CARD_BODY_STYLE = `
   /* ICD list: the phrase, its code beside it. */
   .dx { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; border: 1px solid #e6ddcc; border-radius: 8px; background: #fff; padding: 6px 8px; font: inherit; color: inherit; }
   .dx:hover { border-color: #b9c3ea; background: #fbfaff; }
-  .dx .ph { flex: 1; min-width: 0; font-size: 12.5px; color: #24211c; }
+  .dx .ph { flex: 1; min-width: 0; display: grid; gap: 1px; font-size: 12.5px; color: #24211c; }
+  .dx .ph small { font-size: 11.5px; color: #7b7365; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dx.off { background: #fbf8f2; } .dx.off .ph > span { color: #7b7365; }
+  .sum { display: flex; gap: 12px; font-size: 12px; color: #7b7365; } .sum b { color: #03045a; font-size: 14px; margin-right: 3px; }
   .chip { flex: none; font: 700 12px/1 ui-monospace, Menlo, monospace; color: #03045a; background: #eef1fb; border-radius: 6px; padding: 4px 6px; }
   .chip.none { font: 600 11px/1 system-ui, sans-serif; color: #7b7365; background: #f1eadd; }
   /* Diagnosis detail: three titled sections, each section's content under its title. */
@@ -52,14 +54,32 @@ export const CARD_BODY_STYLE = `
   .fix { background: #f6f1e7; border-radius: 8px; padding: 8px 9px; font-size: 12.5px; }
   .fix ul { margin: 6px 0 0; padding-left: 16px; color: #4a453c; } .fix li { margin: 2px 0; }
   .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #e6ddcc; border-top-color: #00309f; animation: spin .8s linear infinite; flex: none; }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
-  .steps li { display: grid; gap: 3px; font-size: 13px; color: #24211c; }
-  .steps .lab { display: flex; gap: 8px; align-items: center; }
-  .steps li.next { color: #a39a8a; } .steps li.done .lab { color: #7b7365; }
-  .steps .res { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-left: 20px; font-size: 12px; color: #4a453c; }
-  .steps .res span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .steps .res.more { color: #a39a8a; }
-  .steps .tick { width: 12px; flex: none; color: #00309f; font-size: 12px; text-align: center; }
-  .steps .dot { width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: #d8cfbe; flex: none; animation: none; }
+  /* Coding in progress: a three-part stage bar, then one live row per diagnosis, all running at once. */
+  .prog { display: grid; gap: 3px; }
+  .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 5px; }
+  .seg { height: 4px; border-radius: 4px; background: #ece4d4; overflow: hidden; position: relative; }
+  .seg.done { background: #00309f; }
+  .seg.now { background: #c9d3f0; } .seg.now::after { content: ""; position: absolute; inset: 0; width: 40%; border-radius: 4px; background: #00309f; animation: slide 1.3s ease-in-out infinite; }
+  .pt { font-size: 13px; font-weight: 600; color: #24211c; } .ps { font-size: 11.5px; color: #7b7365; font-variant-numeric: tabular-nums; }
+  .live { display: grid; gap: 5px; }
+  .lr { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e6ddcc; border-radius: 8px; background: #fff; font-size: 12.5px; }
+  .lr .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #24211c; }
+  .lr .ind { width: 9px; height: 9px; border-radius: 50%; flex: none; border: 2px solid #c9d3f0; border-top-color: #00309f; animation: spin .8s linear infinite; }
+  .lr.done .ind { animation: none; border: 0; background: #15803d; }
+  .lr.read .ind { animation: none; border-color: #00309f; }
+  .lr.skipped, .lr.failed { background: #fbf8f2; } .lr.skipped .ph, .lr.failed .ph { color: #7b7365; }
+  .lr.skipped .ind { animation: none; border-color: #d8cfbe; } .lr.failed .ind { animation: none; border: 0; background: #c2410c; }
+  .lr.ghost .ind { animation: none; border-color: #ece4d4; }
+  .sk { flex: none; font: 600 10.5px/1 system-ui, sans-serif; color: #5d6aa8; padding: 4px 7px; border-radius: 6px;
+    background: linear-gradient(90deg, #eef1fb 25%, #dfe5f8 50%, #eef1fb 75%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+  .sk.wide { flex: 1; height: 10px; padding: 0; }
+  .tag { flex: none; font: 600 10.5px/1 system-ui, sans-serif; color: #7b7365; background: #f1eadd; border-radius: 6px; padding: 4px 7px; }
+  .tag.bad { color: #9a3412; background: #f8eadf; }
+  .pop { animation: pop .35s cubic-bezier(.2,.9,.3,1.4); }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  @keyframes slide { from { left: -40%; } to { left: 100%; } }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .sk, .seg.now::after, .lr .ind, .pop { animation: none; } }
 `;
 
 /** Styles for the Codio AI companion: one element that is a pill or a card. */
@@ -79,14 +99,14 @@ export const STYLE = `
   .listening { background: #c2410c; animation: pulse 1.1s ease-in-out infinite; }
   .listening .dot { display: none; } .listening .mic { display: block; }
   .working .dot { background: transparent; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; width: 6px; height: 6px; animation: spin .8s linear infinite; }
-  .panel { display: none; width: 330px; box-sizing: border-box; overflow-y: auto; opacity: 0; transition: opacity .2s .1s; }
+  .panel { display: none; width: 347px; box-sizing: border-box; overflow-y: auto; opacity: 0; transition: opacity .2s .1s; }
   .shell.card { transform: translate(0, 0); background: #fffdf8; color: #24211c; border-radius: 14px; border-color: #e6ddcc; pointer-events: auto;
     box-shadow: 0 12px 34px rgba(3, 4, 90, .18); }
   .shell.card .pill { position: absolute; opacity: 0; pointer-events: none; }
   .shell.card .panel, .shell.measuring .panel { display: block; }
   .shell.card .panel { opacity: 1; }
   .shell .chev { display: none; }
-  .shell.measuring { width: 330px !important; height: auto !important; visibility: hidden; }
+  .shell.measuring { width: 347px !important; height: auto !important; visibility: hidden; }
 
   ${CARD_BODY_STYLE}
   @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(194, 65, 12, .45); } 50% { box-shadow: 0 0 0 7px rgba(194, 65, 12, 0); } }

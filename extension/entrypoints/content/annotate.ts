@@ -1,7 +1,7 @@
 /**
  * Suggestions over the report: each suggestion's quoted words are highlighted where they appear
- * on the page, with a numbered marker beside them. The highlight uses the browser's own text
- * highlight feature, so the page's content is never changed; markers live in one overlay layer.
+ * on the page, and clicking them opens the item. The highlight uses the browser's own text
+ * highlight feature, so the page's content is never changed and nothing is drawn over it.
  */
 const HIGHLIGHT = "codio-suggestion";
 const ACTIVE = "codio-suggestion-active";
@@ -12,15 +12,12 @@ interface Mark {
   range: Range;
 }
 
-let marks: Mark[] = [];
-let layer: HTMLElement | null = null;
-let badges: HTMLElement | null = null;
 let onPick: ((index: number) => void) | null = null;
 /** Every highlighted range (an item can have several), for telling which one a click landed in. */
 let hits: Mark[] = [];
 
 /**
- * A plain click on highlighted words opens that item, like its numbered marker. A click that ends
+ * A plain click on highlighted words opens that item. A click that ends
  * a text selection is left alone, so highlight-to-code still works on top of a highlight.
  */
 function onPageClick(e: MouseEvent): void {
@@ -46,7 +43,7 @@ function textIndex(): { nodes: { node: Text; start: number; raw: string }[]; tex
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       const el = n.parentElement;
-      if (!el || el.closest("script, style, noscript, codio-ai, codio-ai-dock, codio-marks")) return NodeFilter.FILTER_REJECT;
+      if (!el || el.closest("script, style, noscript, codio-ai, codio-ai-dock")) return NodeFilter.FILTER_REJECT;
       return n.nodeValue?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     },
   });
@@ -79,45 +76,22 @@ function findRange(quote: string, idx: ReturnType<typeof textIndex>): Range | nu
   return range;
 }
 
+/**
+ * The highlight look. The style element is rewritten every time, never just reused: a copy of Codio from
+ * before a reload left its own in the page (the old orange underline), and the highlights share it by name.
+ * The same old copy's margin markers (codio-marks) are removed; this build draws none.
+ */
 function ensureStyle(): void {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
+  document.querySelectorAll("codio-marks").forEach((el) => el.remove());
+  const style = (document.getElementById(STYLE_ID) as HTMLStyleElement | null) ?? document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    ::highlight(${HIGHLIGHT}) { background-color: rgba(0, 48, 159, .07); }
-    ::highlight(${ACTIVE}) { background-color: rgba(0, 48, 159, .18); }`;
-  (document.head ?? document.documentElement).appendChild(style);
+    ::highlight(${HIGHLIGHT}) { background-color: rgba(251, 191, 36, .42); text-decoration: underline 2px #c2410c; text-underline-offset: 3px; }
+    ::highlight(${ACTIVE}) { background-color: rgba(245, 158, 11, .62); text-decoration: underline 2.5px #9a3412; text-underline-offset: 3px; }`;
+  if (!style.isConnected) (document.head ?? document.documentElement).appendChild(style);
 }
 
-const MARK_STYLE = `
-  :host { all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483645; }
-  .b { position: fixed; width: 10px; height: 10px; border-radius: 50%; background: #fff; color: #00309f; pointer-events: auto;
-    cursor: pointer; box-shadow: 0 1px 3px rgba(3,4,90,.18);
-    border: 1px solid #c9d3f0; transform: translate(-100%, 4px); transition: transform .15s, background .15s, color .15s; }
-  .b:hover, .b.on { background: #03045a; color: #fff; border-color: #03045a; }`;
-
-/** Keep each marker in the margin just left of its highlight; markers that would overlap sit side by side. */
-const BADGE = 12;
-function placeBadges(): void {
-  if (!badges) return;
-  const placed: { left: number; top: number }[] = [];
-  for (const m of marks) {
-    const el = badges.querySelector<HTMLElement>(`[data-i="${m.index}"]`);
-    const rect = m.range.getClientRects()[0];
-    if (!el) continue;
-    const visible = rect && rect.bottom > 0 && rect.top < innerHeight;
-    el.style.display = visible ? "block" : "none";
-    if (!rect || !visible) continue;
-    let left = Math.max(BADGE + 4, rect.left - 4);
-    while (placed.some((p) => Math.abs(p.top - rect.top) < BADGE && Math.abs(p.left - left) < BADGE)) left -= BADGE;
-    if (left < BADGE) left = rect.left + rect.width + BADGE;
-    placed.push({ left, top: rect.top });
-    el.style.left = `${left}px`;
-    el.style.top = `${rect.top}px`;
-  }
-}
-
-/** Highlight each suggestion's quotes; returns how many suggestions could be placed on the page. */
+/** Highlight each item's quotes; returns how many items could be placed on the page. */
 export function annotate(quotesPerSuggestion: string[][], pick: (index: number) => void): number {
   clearAnnotations();
   if (!("highlights" in CSS)) return 0;
@@ -127,45 +101,21 @@ export function annotate(quotesPerSuggestion: string[][], pick: (index: number) 
   quotesPerSuggestion.forEach((quotes, index) => {
     for (const q of quotes) {
       const range = findRange(q, idx);
-      if (range) marks.push({ index, range });
+      if (range) hits.push({ index, range });
     }
   });
-  CSS.highlights.set(HIGHLIGHT, new Highlight(...marks.map((m) => m.range)));
-  hits = [...marks];
+  CSS.highlights.set(HIGHLIGHT, new Highlight(...hits.map((m) => m.range)));
   document.addEventListener("click", onPageClick, true);
-
-  layer = document.createElement("codio-marks");
-  const root = layer.attachShadow({ mode: "closed" });
-  root.innerHTML = `<style>${MARK_STYLE}</style><div></div>`;
-  badges = root.querySelector("div");
-  const first = new Map<number, Mark>();
-  for (const m of marks) if (!first.has(m.index)) first.set(m.index, m);
-  marks = [...first.values()];
-  for (const m of marks) {
-    const b = document.createElement("div");
-    b.className = "b";
-    b.dataset.i = String(m.index);
-    b.title = "Open in Codio";
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      onPick?.(m.index);
-    });
-    badges?.appendChild(b);
-  }
-  (document.documentElement ?? document.body).appendChild(layer);
-  placeBadges();
-  window.addEventListener("scroll", placeBadges, { passive: true, capture: true });
-  window.addEventListener("resize", placeBadges);
-  return marks.length;
+  return new Set(hits.map((m) => m.index)).size;
 }
 
-/** Bring one suggestion into view and emphasise it. */
-export function focusSuggestion(index: number): void {
-  const m = marks.find((x) => x.index === index);
-  badges?.querySelectorAll(".b").forEach((b) => b.classList.toggle("on", (b as HTMLElement).dataset.i === String(index)));
-  if (!m) return;
-  CSS.highlights.set(ACTIVE, new Highlight(m.range));
-  (m.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: "smooth" });
+/** Mark the items being looked at: all their words stand out, and the first item's words are scrolled into view. */
+export function focusSuggestion(index: number | number[]): void {
+  const order = Array.isArray(index) ? index : [index];
+  const mine = order.flatMap((i) => hits.filter((x) => x.index === i));
+  if (!mine.length) return;
+  CSS.highlights.set(ACTIVE, new Highlight(...mine.map((m) => m.range)));
+  (mine[0]?.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 export function clearAnnotations(): void {
@@ -175,9 +125,4 @@ export function clearAnnotations(): void {
     CSS.highlights.delete(HIGHLIGHT);
     CSS.highlights.delete(ACTIVE);
   }
-  layer?.remove();
-  layer = badges = null;
-  marks = [];
-  window.removeEventListener("scroll", placeBadges, { capture: true });
-  window.removeEventListener("resize", placeBadges);
 }

@@ -53,10 +53,25 @@ When a report opens (and the privacy gate agrees it is clinical), the panel read
 report, not just the screen, and lists every field with a short summary and its key details:
 
 - **PDF tab or PDF embedded in the page:** the PDF file is fetched and every page is read (`P-READ-FILE`).
-- **Web page:** the content script scrolls the page and every large inner scroll area to its true end
-  (position stops moving and content stops growing, so lazy-loaded parts load), reads all text, then
-  scrolls back.
+- **Web page:** the content script probes the page and every large inner scroll area at once with
+  one jump to the bottom and back. Only an area that grew (it lazy-loads) is then scrolled to its true
+  end, screen by screen; a report already whole in the page is read without walking it. Then it reads
+  all text.
 - **Report drawn as images:** screenshots screen by screen until the page stops moving (`P-READ-SCREEN`).
+
+ICD coding on the page runs as one job per report (`extension/entrypoints/content/reportJobs.ts`): in a
+single-page EMR the provider can start a report, open the next and start that too. A job keeps running
+after the provider leaves its report and saves its own codes (History + the session copy). The service
+runs each job as its own engine process, so jobs code in parallel. Inside one report the diagnoses are
+coded side by side too; the job's step carries every diagnosis with its own state (`items`: reading,
+read, coding, done with its code, skipped, failed), and the progress card shows a stage bar (CDI first,
+since the job is the report run, then finding, reading details, coding) and one live row per diagnosis with
+each code popping in as it lands. The run's CPT codes fill the CPT card beside it.
+
+Permission is asked on **every** visit to a report (opening it, coming back to it, refreshing it): an
+earlier "Code it" never carries over. "Code it" codes the report again, or follows its job if one is
+still running. Only "Read notes without asking" in Settings skips the question. Each report is told
+apart by its full address, query and hash included (`extension/utils/reportKey.ts`).
 
 Then `POST /v1/report/summarize` runs `P-SUMMARIZE`. Set `summary_only: false` to bring the full
 chat agent back.
@@ -83,7 +98,8 @@ answered from the open report in summary mode, or sent to the chat otherwise. An
 
 **Codio AI companion (primary interface, no panel needed).** One element on every page that follows the
 pointer and changes shape in place: highlight text → code card (code and name only, placed beside the
-highlight and kept on screen); a page that looks like a report (local heading count, nothing sent) →
+highlight and kept on screen); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
+"Assessment:", never its running text, so a page written about coding is not mistaken for one; nothing sent) →
 permission card ("Code this report?") → on yes, the whole report is read and the ICD pipeline runs on it (no
 summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
 and each phrase is highlighted and numbered on the report. Clicking a phrase, in the card or on the chart
@@ -107,7 +123,7 @@ silences the next one opened in the same tab. While the local service is not run
 in a bar under its header and keeps asking every 5 s, so it picks the tab up by itself once the service is
 started; on web pages the companion simply stays off until the next load. Hold ⌘⌥ → listening mic, answered in place.
 Click elsewhere returns it to the pill and clears the highlight. Code: `extension/entrypoints/content/
-companion.ts` (controller), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
+companion.ts` (controller), `codeCard.ts` (highlight-to-code card), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
 `selection.ts`, `pushToTalk.ts`; recording via `entrypoints/offscreen/`. The side panel remains for chat.
 Reloading Codio in `chrome://extensions` puts a fresh content script into every open http(s) tab
 (`background.ts` `injectIntoOpenTabs`, on `onInstalled`); the copy left by the old build sees the new one

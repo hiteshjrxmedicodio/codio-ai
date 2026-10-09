@@ -2,6 +2,8 @@ import type { ReportScrollResult } from "@/utils/messages";
 import { readDom } from "./domReader";
 
 const STEP_WAIT_MS = 350;
+/** Long enough for a lazy-loading report to start adding to itself once its end comes into view. */
+const PROBE_WAIT_MS = 400;
 const SETTLE_ROUNDS = 2;
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -18,6 +20,21 @@ function scrollTargets(): Element[] {
     return r.width * r.height >= minArea;
   });
   return [page, ...inner];
+}
+
+/**
+ * Does this area load more as it is scrolled? One jump to the bottom and back tells: most reports are
+ * already whole in the page, and for those the screen-by-screen walk below (seconds of the page jumping
+ * under the provider) is skipped.
+ */
+async function growsWhenScrolled(el: Element): Promise<boolean> {
+  const start = el.scrollTop;
+  const height = el.scrollHeight;
+  el.scrollTop = el.scrollHeight;
+  await wait(PROBE_WAIT_MS);
+  const grew = el.scrollHeight > height + 2;
+  el.scrollTop = start;
+  return grew;
 }
 
 /**
@@ -55,11 +72,16 @@ function embeddedPdfs(): string[] {
   return [...new Set(urls.map((u) => new URL(u, location.href).href))];
 }
 
-/** Read the whole report: scroll every scrolling area to its end, then read all the text. */
+/**
+ * Read the whole report: every scrolling area is probed at once, the ones that load more as they are
+ * scrolled are walked to their end, then all the text is read.
+ */
 export async function readWholeReport(maxSteps: number): Promise<ReportScrollResult> {
   let steps = 0;
   let reachedEnd = true;
-  for (const el of scrollTargets()) {
+  const targets = scrollTargets();
+  const grows = await Promise.all(targets.map(growsWhenScrolled));
+  for (const el of targets.filter((_, i) => grows[i])) {
     const r = await scrollThrough(el, maxSteps);
     steps += r.steps;
     reachedEnd &&= r.reachedEnd;

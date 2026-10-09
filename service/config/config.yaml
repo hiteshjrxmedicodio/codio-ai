@@ -159,10 +159,14 @@ selection:
 companion:
   enabled: true
   min_hits: 3
+  # Matched against the page's section labels only (a short line, or the words before a line's colon),
+  # never its running text, so the abbreviations reports use as headings are safe here.
   clinical_hints: [chief complaint, history of present illness, hpi, review of systems, physical exam, examination,
     assessment, plan, diagnosis, diagnoses, impression, procedure, findings, medications, allergies, vital signs,
     discharge summary, operative report, op note, pathology, lab results, laboratory, progress note, date of service,
-    attending, admission, discharge, indication, specimen, anesthesia, postoperative, preoperative, mrn, encounter]
+    attending, admission, discharge, indication, specimen, anesthesia, postoperative, preoperative, mrn, encounter,
+    cc, hx, pmh, psh, fhx, shx, meds, ros, exam, labs, vitals, heent, a/p, past medical history,
+    past surgical history, family history, social history, hospital course, course, pre op, post op]
 
 # Report → diagnoses (with the exact phrases) → coding parameters → ICD-10-CM code from the ICD engine
 # in jev_path (CMS index search, tree walk, links, verification; Gemini fallback). Its pick-one questions

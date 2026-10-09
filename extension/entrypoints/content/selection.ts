@@ -2,7 +2,7 @@
  * Highlight-to-code: highlighting text asks Codio whether it is a diagnosis or a procedure and,
  * if so, the companion turns into the code card in place. Read-only: it never types or clicks.
  */
-import { showCodes, showCodesError, showCodesLoading } from "./companion";
+import { showCodes, showCodesError, showCodesLoading } from "./codeCard";
 
 const MIN_CHARS = 3;
 const MAX_CHARS = 1500;

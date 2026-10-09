@@ -8,12 +8,12 @@
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import * as card from "./companionUi/cards";
 import { icdDetailCard, icdListCard, icdProgressCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
-import { runIcdJob } from "./icdJob";
+import { follow, isCoding, startCoding, type CodedReport } from "./reportJobs";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
-import { cptCardHtml, readRun, type CptCard } from "./reportRun";
+import { cptCardHtml, type CptCard } from "./reportRun";
 
 export { consent };
 
@@ -56,20 +56,15 @@ const MAX_SCROLL_STEPS = 60;
 
 const send = <T>(message: Record<string, unknown>) => browser.runtime.sendMessage(message) as Promise<T>;
 
-/** Report cards dock to the right edge; code cards open where the pointer is. */
-/** Where the last highlight sits, so its code card opens next to it. */
-let anchor: DOMRect | undefined;
-
 /**
  * Report results go to their own card in the top-right stack (ICD-10 codes, the documentation
- * review, CPT and final codes, answers), which lets the pill keep following the pointer. Code cards for
- * a highlight open beside it, where the pill turns into them. `focus` opens the card; background
- * updates pass false so they never take over the card being read.
+ * review, CPT and final codes, answers), which lets the pill keep following the pointer. `focus` opens
+ * the card; background updates pass false so they never take over the card being read. (Code cards for
+ * a highlight, which open beside it where the pill turns into them, live in codeCard.ts.)
  */
-function show(html: string, where: dock.CardId | "pointer" = "review", focus = true): void {
+function show(html: string, where: dock.CardId = "review", focus = true): void {
   window.clearTimeout(messageTimer);
-  if (where === "pointer") view.openCard(html, "pointer", anchor);
-  else dock.setCard(where, html, focus);
+  dock.setCard(where, html, focus);
 }
 
 /** Codes for one of the prediction cards: ICD-10, CPT or the final set. */
@@ -106,8 +101,7 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
   if (!btn) return;
   const action = btn.dataset.action;
   const index = Number(btn.dataset.index);
-  if (action === "close") dismiss();
-  else if (action === "copy") {
+  if (action === "copy") {
     try {
       await navigator.clipboard.writeText(btn.dataset.code ?? "");
       btn.textContent = "Copied";
@@ -135,12 +129,12 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
 // ── Report: permission, reading, ICD codes over the report ─────────────────
 /** Turn into the permission question, unless something else is on screen or the provider already answered. */
 export function offerPermission(): void {
-  if (!on || view.isCard() || dock.hasCard("icd") || report || consent()) return;
+  if (!on || view.isCard() || dock.hasCard("icd") || report) return;
   show(card.permissionCard(), "icd");
 }
 
 /**
- * The chart shows one set of highlights at a time, numbered like the card they belong to: the
+ * The chart shows one set of highlights at a time, for the card they belong to: the
  * diagnosis phrases, or the documentation suggestions while the provider is in that card.
  */
 let marked: "icd" | "review" | null = null;
@@ -148,9 +142,7 @@ function mark(set: "icd" | "review"): void {
   const r = report;
   if (!r || marked === set) return;
   marked = set;
-  // Phrases sharing a code are highlighted as one: all their quotes sit under the first phrase's marker.
-  const dx = r.icd?.diagnoses ?? [], lead = sameCodeLeaders(dx);
-  if (set === "icd") annotate(dx.map((_, i) => dx.flatMap((d, j) => (lead[j] === i ? d.quotes.map((q) => q.text) : []))), pickDiagnosis);
+  if (set === "icd") annotate((r.icd?.diagnoses ?? []).map((d) => d.quotes.map((q) => q.text)), pickDiagnosis);
   else annotate(r.suggestions.map((s, i) => (r.votes[i] === "down" ? [] : s.quotes.map((q) => q.text))), pickSuggestion);
 }
 
@@ -166,9 +158,10 @@ function renderIcd(focus = true): void {
 function pickDiagnosis(index: number): void {
   if (!report?.icd?.diagnoses[index]) return;
   mark("icd");
-  index = sameCodeLeaders(report.icd.diagnoses)[index] ?? index;
   viewingDx = index;
-  focusSuggestion(index);
+  // The clicked phrase leads; every phrase sharing its code stands out with it, as they share one trail.
+  const lead = sameCodeLeaders(report.icd.diagnoses);
+  focusSuggestion([index, ...lead.flatMap((l, i) => (i !== index && l === lead[index] ? [i] : []))]);
   renderIcd();
 }
 
@@ -276,47 +269,52 @@ function present(r: Report): void {
   if (report.checked) renderReview(false);
 }
 
-/**
- * After a refresh, on a report the provider already said yes to this session: read it again and,
- * when its words are unchanged, bring the last codes straight back without running the pipeline.
- */
+/** "Read notes without asking" is on: code the report without asking, reusing its last codes if its words are unchanged. */
 export function resumeReport(): void {
   if (on && !report) void readReport(true);
 }
 
 /**
- * Read the whole report and run the ICD pipeline on it: the phrases that state each diagnosis,
- * then a code for each. With `reuse`, a report whose words match the last run this session shows
- * that run's codes instead of running it again.
+ * Read the whole report and code it as this page's job (reportJobs, the report run: CDI, then ICD-10 and
+ * CPT): leaving does not stop it, other reports can code meanwhile, and coming back follows it. With
+ * `reuse`, unchanged words show the last codes.
  */
 async function readReport(reuse = false): Promise<void> {
-  remember("allowed");
-  // Only talk about bringing codes back when there is an earlier run to bring back.
-  const saved = reuse ? await send<Remembered | null>({ type: "report:recall", key: pageKey() }).catch(() => null) : null;
-  const usable = saved?.report?.icd ? saved : null;
-  show(card.loadingCard("ICD-10 codes", usable ? "Bringing back your codes…" : "Reading the whole report…"), "icd");
+  const key = pageKey();
+  const here = () => pageKey() === key;
   try {
-    const page = await readWholeReport(MAX_SCROLL_STEPS);
-    fp = await fingerprint(page.blocks);
-    if (usable) {
-      if (usable.fingerprint === fp) return present(usable.report);
-      show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
+    if (!isCoding(key)) {
+      const saved = reuse ? await send<Remembered | null>({ type: "report:recall", key }).catch(() => null) : null;
+      const usable = saved?.report?.icd ? saved : null;
+      show(card.loadingCard("ICD-10 codes", usable ? "Bringing back your codes…" : "Reading the whole report…"), "icd");
+      const page = await readWholeReport(MAX_SCROLL_STEPS);
+      if (!here()) return;
+      const print = await fingerprint(page.blocks);
+      if (usable?.fingerprint === print) return void ((fp = print), present(usable.report));
+      if (usable) show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
+      remember("allowed");
+      // A job for this page may have started while the report was read (a second click): follow that one.
+      const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
+      if (!isCoding(key)) startCoding(key, { title: document.title, blocks: page.blocks, coverage, fingerprint: print });
     }
-    const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
+    // The job is the report run: its CPT card fills alongside the ICD card.
     showPrediction("cpt", null);
-    const { icd, cpt } = readRun(await runIcdJob(page.blocks, (step) => show(icdProgressCard(step), "icd"), "codes"));
-    present({ title: document.title, blocks: page.blocks, coverage, icd, cpt, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
-    persist();
-    if (pendingQuestion) {
-      const q = pendingQuestion;
-      pendingQuestion = null;
-      void askByVoice(q);
-    }
+    const r = await follow(key, (step) => here() && show(icdProgressCard(step), "icd"));
+    if (!r || !here()) return; // Left the report: the job saved its own codes for when the provider is back.
+    fp = r.fingerprint;
+    present(fromCoded(r));
+    const q = pendingQuestion;
+    pendingQuestion = null;
+    if (q) void askByVoice(q);
   } catch (err) {
-    show(card.messageCard("ICD-10 codes", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
-    dock.removeCard("cpt");
+    if (here()) {
+      show(card.messageCard("ICD-10 codes", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
+      dock.removeCard("cpt");
+    }
   }
 }
+
+const fromCoded = ({ fingerprint: _, ...r }: CodedReport): Report => ({ ...r, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
 
 // ── Voice questions ────────────────────────────────────────────────────────
 /** Answer a spoken question in place: from the report once read, or ask to read it first. */
@@ -336,23 +334,6 @@ export async function askByVoice(question: string, looksClinical = false): Promi
   show(card.answerCard(question, r.answer ?? "I couldn't answer that right now."), "answer");
   // Kept with the report's record, like a question asked in the panel.
   if (r.answer) persist([{ q: question, a: r.answer }]);
-}
-
-// ── Highlight-to-code ──────────────────────────────────────────────────────
-export function showCodesLoading(at?: DOMRect): void {
-  anchor = at;
-  show(card.loadingCard("Codio AI", "Checking the highlighted text…"), "pointer");
-}
-export function showCodes(result: { kind: string; icd: card.Code[]; cpt: card.Code[] }): void {
-  if (result.kind === "neither" || (!result.icd.length && !result.cpt.length)) {
-    show(card.messageCard("Codio AI", "This isn't a diagnosis or procedure I can code."), "pointer");
-    messageTimer = window.setTimeout(() => dismiss(false), 1800);
-    return;
-  }
-  show(card.codesCard(result.kind, result.icd, result.cpt), "pointer");
-}
-export function showCodesError(): void {
-  show(card.messageCard("Codio AI", "I couldn't code this right now."), "pointer");
 }
 
 // ── Pill modes and lifecycle ───────────────────────────────────────────────
@@ -382,12 +363,16 @@ export function companionOff(): void {
   document.removeEventListener("mousemove", onMove);
   document.removeEventListener("mouseout", onLeave);
   document.removeEventListener("mousedown", onDown, true);
-  clearAnnotations();
+  leaveReport();
   view.unmount();
   dock.unmountDock();
-  report = null;
-  viewing = viewingDx = null;
-  marked = null;
+}
+
+/** The provider left the report (a single-page app changed its address): its highlights and cards go with it. */
+export function leaveReport(): void {
+  clearAnnotations();
+  for (const id of ["icd", "review", "answer"] as const) dock.removeCard(id);
+  report = pendingQuestion = viewing = viewingDx = marked = null;
 }
 
 /** Dictation's fill tag is the cursor while fill mode is armed; the companion waits. */

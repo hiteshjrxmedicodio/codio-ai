@@ -6,7 +6,7 @@ import { CARD_BODY_STYLE } from "./style";
  */
 export const DOCK_STYLE = `
   :host { all: initial; position: fixed; top: 12px; right: 16px; z-index: 2147483646; }
-  .stack { box-sizing: border-box; width: 340px; max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  .stack { box-sizing: border-box; width: 357px; max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
     font: 13px/1.45 system-ui, -apple-system, sans-serif; color: #24211c; scrollbar-width: thin; }
   .stack:empty { display: none; }
   .card { flex: none; background: #fffdf8; border: 1px solid #e6ddcc; border-radius: 14px; overflow: hidden;
@@ -24,7 +24,6 @@ export const DOCK_STYLE = `
   .chev { display: inline-flex; margin-left: auto; width: 16px; height: 16px; align-items: center; justify-content: center;
     color: #c9ccf2; transition: transform .2s; }
   .chev svg { width: 12px; height: 12px; }
-  .chev + .x { margin-left: 6px; }
   .head:hover .chev { color: #fff; }
   .card.collapsed .chev { transform: rotate(-90deg); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #5b8cff; flex: none; }

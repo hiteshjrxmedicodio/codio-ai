@@ -8,7 +8,7 @@ import { STYLE } from "./style";
 
 export type PillMode = "idle" | "listening" | "working" | "message";
 const PILL_TEXT: Record<PillMode, string> = { idle: "Codio AI", listening: "Listening…", working: "Thinking…", message: "" };
-const CARD_WIDTH = 330;
+const CARD_WIDTH = 347;
 const MORPH_MS = 300;
 
 let host: HTMLElement | null = null;
@@ -27,6 +27,8 @@ const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matche
 
 export function mount(onPanelClick: (e: MouseEvent) => void): void {
   if (host?.isConnected) return;
+  // A copy of Codio from before a reload leaves its card in the page; only this copy's card stays.
+  document.querySelectorAll("codio-ai").forEach((el) => el.remove());
   host = document.createElement("codio-ai");
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>${STYLE}</style>

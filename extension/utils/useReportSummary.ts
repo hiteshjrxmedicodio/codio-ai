@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { reportKey } from "./reportKey";
 import { api } from "./api";
 import { recallReport } from "./bg/reportCache";
 import { findChartIds, type ChartId } from "./chartIds";
@@ -25,12 +26,11 @@ interface CompanionRead {
 
 /**
  * What the Codio AI companion on the page already did with this report this session (its review,
- * thumbs and summary), kept by the extension under the page's address without its query.
+ * thumbs and summary), kept by the extension under the report's key (reportKey: the full address).
  */
 async function companionRead(url: string): Promise<CompanionRead | null> {
   try {
-    const u = new URL(url);
-    const entry = (await recallReport(`codio-consent:${u.origin}${u.pathname}`)) as { report?: CompanionRead } | null;
+    const entry = (await recallReport(reportKey(url))) as { report?: CompanionRead } | null;
     return entry?.report ?? null;
   } catch {
     return null;

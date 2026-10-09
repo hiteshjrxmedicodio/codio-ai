@@ -17,9 +17,13 @@ export interface Suggestion {
 
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
 
-/** Card header. In the docked card, the header bar (with its chevron) collapses and opens the card. */
+/**
+ * Card header. In the docked card, the header bar (with its chevron) collapses and opens the card; there
+ * is no close button, so a card is never thrown away by the provider, only folded. The pointer card goes
+ * when the provider clicks elsewhere on the page.
+ */
 export const head = (title: string) =>
-  `<div class="head" title="Collapse or open"><span class="dot"></span><span>${esc(title)}</span><span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span><button class="x" data-action="close" aria-label="Close">×</button></div>`;
+  `<div class="head" title="Collapse or open"><span class="dot"></span><span>${esc(title)}</span><span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></div>`;
 
 export const IMPACT: Record<string, string> = { coding: "Affects coding", denial: "Could cause a denial", interpretation: "Could be misread" };
 

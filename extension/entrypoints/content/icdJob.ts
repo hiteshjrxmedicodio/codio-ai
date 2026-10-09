@@ -15,7 +15,8 @@ interface JobStatus<T> {
   error?: string;
 }
 
-const POLL_MS = 1500;
+/** Short, so each code shows in its row soon after it lands; the service is local. */
+const POLL_MS = 700;
 const send = <T>(message: Record<string, unknown>) => browser.runtime.sendMessage(message) as Promise<T>;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

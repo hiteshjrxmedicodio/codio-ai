@@ -47,13 +47,14 @@ function onClick(e: MouseEvent, onAction: (e: MouseEvent) => void): void {
   const id = el?.dataset.id as CardId | undefined;
   const action = target.closest<HTMLElement>("[data-action]")?.dataset.action;
   if (!id) return;
-  if (action === "close") return removeCard(id);
   if (!action && target.closest(".head")) return expand(openId === id ? null : id);
   onAction(e);
 }
 
 export function mountDock(onAction: (e: MouseEvent) => void): void {
   if (host?.isConnected) return;
+  // A copy of Codio from before a reload leaves its dock in the page; only this copy's dock stays.
+  document.querySelectorAll(TAG).forEach((el) => el.remove());
   host = document.createElement(TAG);
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>${DOCK_STYLE}</style><div class="stack" role="complementary" aria-label="Codio AI"></div>`;

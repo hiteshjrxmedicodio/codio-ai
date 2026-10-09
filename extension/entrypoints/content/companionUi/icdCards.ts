@@ -25,6 +25,14 @@ export interface CodedDiagnosis {
   trail?: { start: { code: string; term: string; desc: string | null }[]; steps: TrailStep[]; fallback: boolean } | null;
 }
 
+/** One diagnosis while coding runs; diagnoses are worked on side by side, each with its own state. */
+export interface IcdItem {
+  phrase: string;
+  state: "reading" | "read" | "coding" | "done" | "skipped" | "failed";
+  code?: string | null;
+  note?: string;
+}
+
 export interface IcdStep {
   step: "cdi" | "extract" | "params" | "codes" | "done";
   /** The report run cleans the report (CDI) before the ICD steps. */
@@ -32,50 +40,71 @@ export interface IcdStep {
   label: string;
   done?: number;
   total?: number;
-  found?: string[];
-  coded?: { phrase: string; code: string | null }[];
+  items?: IcdItem[];
 }
 
-const STEPS: { key: IcdStep["step"]; label: string }[] = [
+const STAGES: { key: IcdStep["step"]; label: string }[] = [
   { key: "cdi", label: "Cleaning the report (CDI)" },
   { key: "extract", label: "Finding the diagnoses" },
   { key: "params", label: "Reading coding details" },
-  { key: "codes", label: "Choosing the ICD-10 codes" },
+  { key: "codes", label: "Choosing the codes" },
 ];
 
-const MAX_ROWS = 4;
-const more = (n: number) => (n > MAX_ROWS ? `<div class="res more">and ${n - MAX_ROWS} more</div>` : "");
+const SKIPPED: Record<string, string> = { historical: "History only", uncertain: "Uncertain", ruled_out: "Ruled out" };
 
-/** What a step has produced so far, shown under it: the diagnoses found, then each code as it lands. */
-function stepResult(key: IcdStep["step"], s: IcdStep): string {
-  if (key === "extract" && s.found?.length) {
-    return s.found.slice(0, MAX_ROWS).map((p) => `<div class="res">${esc(p)}</div>`).join("") + more(s.found.length);
+/** Codes already shown on the progress card, so only a code that has just landed pops in. */
+let shown = new Set<string>();
+
+/** What sits at the right of a diagnosis row: a shimmering placeholder while it runs, its code once it lands. */
+function slot(x: IcdItem, i: number): string {
+  if (x.state === "done") {
+    const key = `${i}:${x.code ?? ""}`;
+    const pop = shown.has(key) ? "" : " pop";
+    shown.add(key);
+    return x.code ? `<span class="chip${pop}">${esc(x.code)}</span>` : `<span class="chip none${pop}">Review</span>`;
   }
-  if (key === "codes" && s.coded?.length) {
-    return s.coded.slice(-MAX_ROWS).map((c) => `<div class="res"><span>${esc(c.phrase)}</span>${c.code ? `<span class="chip">${esc(c.code)}</span>` : `<span class="chip none">Review</span>`}</div>`).join("");
-  }
-  return "";
+  if (x.state === "skipped") return `<span class="tag">${esc(SKIPPED[x.note ?? ""] ?? "Not coded")}</span>`;
+  if (x.state === "failed") return `<span class="tag bad">Couldn't code</span>`;
+  return `<span class="sk">${x.state === "coding" ? "Coding" : x.state === "read" ? "Ready" : "Reading"}</span>`;
 }
 
-/** The three coding steps while they run: finished ones ticked with what they found, the current one spinning with its count. */
+/**
+ * Coding while it runs. A bar with one segment per stage says where it is (CDI first when the report run
+ * cleaned the report); under it every diagnosis has its own row, all running at once, and each code pops
+ * into its row the moment it lands.
+ */
 export function icdProgressCard(s: IcdStep): string {
-  const steps = STEPS.filter((x) => x.key !== "cdi" || s.withCdi);
-  const at = steps.findIndex((x) => x.key === s.step);
-  const rows = steps.map((x, i) => {
-    const state = s.step === "done" || i < at ? "done" : i === at ? "now" : "next";
-    const mark = state === "done" ? `<span class="tick">✓</span>` : state === "now" ? `<span class="spin"></span>` : `<span class="dot"></span>`;
-    const label = x.key === "extract" && state === "done" && s.found ? `Found ${s.found.length} diagnos${s.found.length === 1 ? "is" : "es"}` : x.label;
-    const count = state === "now" && s.total ? ` <span class="conf">${s.done ?? 0} of ${s.total}</span>` : "";
-    return `<li class="${state}"><div class="lab">${mark}<span>${esc(label)}${count}</span></div>${stepResult(x.key, s)}</li>`;
-  }).join("");
-  return `${head("ICD-10 codes")}<div class="body"><ol class="steps">${rows}</ol></div>`;
+  if (s.step === "cdi" || s.step === "extract") shown = new Set();
+  // The CDI stage is shown only for a run that began with it (the report run), never for ICD alone.
+  const stages = STAGES.filter((x) => x.key !== "cdi" || s.withCdi);
+  const at = s.step === "done" ? stages.length : stages.findIndex((x) => x.key === s.step);
+  const bar = stages.map((_, i) => `<span class="seg${i < at ? " done" : i === at ? " now" : ""}"></span>`).join("");
+  const items = s.items ?? [];
+  const active = items.filter((x) => x.state !== "skipped");
+  const landed = active.filter((x) => x.state === "done" || x.state === "failed").length;
+  const title =
+    s.step === "cdi" ? "Cleaning the report…"
+    : s.step === "extract" ? "Finding the diagnoses…"
+    : s.step === "params" ? `Reading details for ${active.length} diagnos${active.length === 1 ? "is" : "es"} at once`
+    : `Coding ${active.length} diagnos${active.length === 1 ? "is" : "es"} in parallel`;
+  const read = active.filter((x) => x.state !== "reading").length;
+  const sub =
+    s.step === "codes" ? `${landed} of ${active.length} coded`
+    : s.step === "params" ? `${read} of ${active.length} read`
+    : s.step === "cdi" ? "Typos, abbreviations and run-on diagnoses, before anything is coded"
+    : "Reading the report";
+  const rows = items.length
+    ? items.map((x, i) => `<div class="lr ${x.state}"><span class="ind"></span><span class="ph" title="${esc(x.phrase)}">${esc(x.phrase)}</span>${slot(x, i)}</div>`).join("")
+    : `<div class="lr ghost"><span class="ind"></span><span class="sk wide"></span></div>`.repeat(3);
+  return `${head("ICD-10 codes")}<div class="body"><div class="prog"><div class="bar">${bar}</div>
+    <div class="pt">${esc(title)}</div><div class="ps">${esc(sub)}</div></div><div class="live">${rows}</div></div>`;
 }
 
 const STATUS: Record<string, string> = { historical: "History only", uncertain: "Uncertain", ruled_out: "Ruled out" };
 
 /**
  * Phrases that landed on the same code are one diagnosis to the provider: each phrase points at the
- * first phrase with that code, and that first phrase opens the shared card and trail.
+ * first phrase with that code, which is how the phrases sharing a card and trail are found.
  */
 export function sameCodeLeaders(list: CodedDiagnosis[]): number[] {
   const first = new Map<string, number>();
@@ -87,13 +116,14 @@ export function sameCodeLeaders(list: CodedDiagnosis[]): number[] {
 }
 
 /**
- * The card for a code stated by several phrases: every phrase's quotes, the coding details any of them
- * documented, and one trail, from a phrase the engine coded itself if there is one (not the second opinion).
+ * The card for the phrase the provider clicked, when other phrases share its code: titled with that phrase,
+ * its quotes first, the coding details any of them documented, and one trail for the whole group (the
+ * same trail whichever phrase is clicked), from a phrase the engine coded itself if there is one.
  */
-export function mergeSameCode(list: CodedDiagnosis[], leader: number): CodedDiagnosis & { alsoAs: string[] } {
+export function mergeSameCode(list: CodedDiagnosis[], clicked: number): CodedDiagnosis & { alsoAs: string[] } {
   const lead = sameCodeLeaders(list);
-  const group = list.filter((_, i) => lead[i] === leader);
-  const main = list[leader] as CodedDiagnosis;
+  const main = list[clicked] as CodedDiagnosis;
+  const group = [main, ...list.filter((_, i) => i !== clicked && lead[i] === lead[clicked])];
   const withTrail = group.filter((d) => d.trail);
   const trail = (withTrail.find((d) => !d.trail?.fallback) ?? withTrail[0])?.trail ?? main.trail;
   const documented = new Map<string, { name: string; value: string }>();
@@ -110,18 +140,21 @@ function codeChip(d: CodedDiagnosis): string {
   return `<span class="chip none">${esc(STATUS[d.status] ?? "Review")}</span>`;
 }
 
+/**
+ * Every diagnosis with its code: the coded ones first, each with its code's description under the phrase,
+ * then the ones not coded, dimmed, with why. Clicking a row opens how its code was reached.
+ */
 export function icdListCard(list: CodedDiagnosis[], engineError?: string): string {
   if (!list.length) return `${head("ICD-10 codes")}<div class="body"><div class="muted">I didn't find any diagnoses in this report.</div></div>`;
-  const coded = list.filter((d) => d.code).length;
-  const lead = sameCodeLeaders(list);
-  const items = list
-    .map(
-      (d, i) => `<button class="dx" data-action="dx" data-index="${lead[i]}" title="Show how this code was reached">
-        <span class="ph">${esc(d.phrase)}</span>${codeChip(d)}</button>`,
-    )
-    .join("");
+  const row = (d: CodedDiagnosis, i: number) => `<button class="dx${d.code ? "" : " off"}" data-action="dx" data-index="${i}" title="Show how this code was reached">
+        <span class="ph"><span>${esc(d.phrase)}</span>${d.code && d.description ? `<small>${esc(d.description)}</small>` : !d.code && d.status === "current" && d.reviewReason ? `<small>${esc(d.reviewReason)}</small>` : ""}</span>${codeChip(d)}</button>`;
+  const indexed = list.map((d, i) => ({ d, i }));
+  const coded = indexed.filter((x) => x.d.code);
+  const rest = indexed.filter((x) => !x.d.code);
+  const sum = `<div class="sum"><span><b>${coded.length}</b> coded</span>${rest.length ? `<span><b>${rest.length}</b> not coded</span>` : ""}</div>`;
   const note = engineError ? `<div class="muted">Codes are unavailable right now: ${esc(engineError)}</div>` : "";
-  return `${head(`ICD-10 codes · ${coded} of ${list.length} coded`)}<div class="body">${items}${note}
+  return `${head("ICD-10 codes")}<div class="body">${sum}${coded.map((x) => row(x.d, x.i)).join("")}
+    ${rest.length ? `<div class="group">Not coded</div>${rest.map((x) => row(x.d, x.i)).join("")}` : ""}${note}
     <div class="muted">Click a phrase here or on the chart to see how its code was reached.</div>
     <div class="actions"><button class="btn ghost" data-action="check">Check documentation</button></div></div>`;
 }

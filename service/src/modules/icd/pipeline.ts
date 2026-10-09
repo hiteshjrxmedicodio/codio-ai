@@ -21,6 +21,18 @@ export interface CodedDiagnosis extends Diagnosis {
   trail: JevTrail | null;
 }
 
+/**
+ * One diagnosis while coding runs. Diagnoses are worked on side by side, so each carries its own state:
+ * reading its coding details, details read, coding, done (with its code), skipped (not a status that is
+ * coded, `note` says which) or failed.
+ */
+export interface IcdItem {
+  phrase: string;
+  state: "reading" | "read" | "coding" | "done" | "skipped" | "failed";
+  code?: string | null;
+  note?: string;
+}
+
 /** Where coding is, shown to the provider while they wait. done/total count diagnoses within a step. */
 export interface IcdStep {
   step: "cdi" | "extract" | "params" | "codes" | "done";
@@ -29,9 +41,8 @@ export interface IcdStep {
   label: string;
   done?: number;
   total?: number;
-  /** Results so far, so earlier steps can show what they found: the diagnoses, then each code as it lands. */
-  found?: string[];
-  coded?: { phrase: string; code: string | null }[];
+  /** Every diagnosis found so far with its own state, so the card can show them all running at once. */
+  items?: IcdItem[];
 }
 
 /** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
@@ -65,12 +76,16 @@ export async function predictIcd(
   usage.push(u1);
   const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
   const toCode = coded.filter(Boolean).length;
-  const found = diagnoses.map((d) => d.phrase);
+  const items: IcdItem[] = diagnoses.map((d, i) =>
+    coded[i] ? { phrase: d.phrase, state: "reading" } : { phrase: d.phrase, state: "skipped", note: d.status },
+  );
+  // A copy per step: the job keeps the last step it was given, and the items keep changing after it.
+  const snapshot = () => items.map((x) => ({ ...x }));
 
   const paramsErrors: (string | undefined)[] = [];
   let read = 0;
   const paramsLabel = `Found ${diagnoses.length} ${diagnoses.length === 1 ? "diagnosis" : "diagnoses"}, reading coding details`;
-  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode, found });
+  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode, items: snapshot() });
   const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
     if (!coded[i]) return null;
     try {
@@ -82,7 +97,8 @@ export async function predictIcd(
       paramsErrors[i] = `Coding details could not be read: ${err instanceof Error ? err.message : String(err)}`;
       return null;
     } finally {
-      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode, found });
+      (items[i] as IcdItem).state = "read";
+      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode, items: snapshot() });
     }
   });
 
@@ -92,15 +108,17 @@ export async function predictIcd(
   if (units.length) {
     try {
       const codesLabel = "Choosing the ICD-10 codes";
-      const landed: { phrase: string; code: string | null }[] = [];
-      const phraseOf = new Map(units.map((u) => [u.uid, u.phrase]));
-      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length, found, coded: [] });
+      let landed = 0;
+      for (const x of items) if (x.state !== "skipped") x.state = "coding";
+      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length, items: snapshot() });
       results = await runJev(units, (uid, code) => {
-        landed.push({ phrase: phraseOf.get(uid) ?? uid, code });
-        onStep({ step: "codes", label: codesLabel, done: landed.length, total: units.length, found, coded: [...landed] });
+        const item = items[Number(uid.slice(2))];
+        if (item) Object.assign(item, { state: "done", code });
+        onStep({ step: "codes", label: codesLabel, done: ++landed, total: units.length, items: snapshot() });
       });
     } catch (err) {
       engineError = String(err instanceof Error ? err.message : err);
+      for (const x of items) if (x.state === "coding") x.state = "failed";
     }
   }
   const byUid = new Map(results.map((r) => [r.uid, r]));

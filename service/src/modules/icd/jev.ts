@@ -36,7 +36,7 @@ export interface JevTrail {
  * Step 3: ICD-10-CM codes from the ICD engine, its questions answered by the Decisions API (or Jev).
  * It runs as a Python child process through bridge/jev_bridge.py; the engine folder is never modified.
  */
-export function runJev(units: JevUnit[], onUnitDone?: (uid: string) => void): Promise<JevResult[]> {
+export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string | null) => void): Promise<JevResult[]> {
   const cfg = getConfig().icd_pipeline;
   return new Promise((resolve, reject) => {
     const child = spawn(cfg.python, [join(SERVICE_ROOT, "bridge", "jev_bridge.py"), "--jev", cfg.jev_path], {
@@ -60,7 +60,8 @@ export function runJev(units: JevUnit[], onUnitDone?: (uid: string) => void): Pr
       for (const line of lines) {
         if (!line.startsWith("PROGRESS ")) continue;
         try {
-          onUnitDone?.((JSON.parse(line.slice(9)) as { uid: string }).uid);
+          const p = JSON.parse(line.slice(9)) as { uid: string; code?: string | null };
+          onUnitDone?.(p.uid, p.code ?? null);
         } catch {
           /* a malformed progress line only loses one progress tick */
         }

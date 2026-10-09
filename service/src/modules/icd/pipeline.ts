@@ -27,6 +27,9 @@ export interface IcdStep {
   label: string;
   done?: number;
   total?: number;
+  /** Results so far, so earlier steps can show what they found: the diagnoses, then each code as it lands. */
+  found?: string[];
+  coded?: { phrase: string; code: string | null }[];
 }
 
 /** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
@@ -57,10 +60,11 @@ export async function predictIcd(
   usage.push(u1);
   const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
   const toCode = coded.filter(Boolean).length;
+  const found = diagnoses.map((d) => d.phrase);
 
   let read = 0;
   const paramsLabel = `Found ${diagnoses.length} ${diagnoses.length === 1 ? "diagnosis" : "diagnoses"}, reading coding details`;
-  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode });
+  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode, found });
   const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
     if (!coded[i]) return null;
     try {
@@ -70,7 +74,7 @@ export async function predictIcd(
     } catch {
       return null;
     } finally {
-      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode });
+      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode, found });
     }
   });
 
@@ -79,10 +83,14 @@ export async function predictIcd(
   let engineError: string | undefined;
   if (units.length) {
     try {
-      let chosen = 0;
       const codesLabel = "Choosing the ICD-10 codes";
-      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length });
-      results = await runJev(units, () => onStep({ step: "codes", label: codesLabel, done: ++chosen, total: units.length }));
+      const landed: { phrase: string; code: string | null }[] = [];
+      const phraseOf = new Map(units.map((u) => [u.uid, u.phrase]));
+      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length, found, coded: [] });
+      results = await runJev(units, (uid, code) => {
+        landed.push({ phrase: phraseOf.get(uid) ?? uid, code });
+        onStep({ step: "codes", label: codesLabel, done: landed.length, total: units.length, found, coded: [...landed] });
+      });
     } catch (err) {
       engineError = String(err instanceof Error ? err.message : err);
     }

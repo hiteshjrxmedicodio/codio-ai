@@ -33,6 +33,20 @@ export const CARD_BODY_STYLE = `
   .dx .ph { flex: 1; min-width: 0; font-size: 12.5px; color: #24211c; }
   .chip { flex: none; font: 700 12px/1 ui-monospace, Menlo, monospace; color: #03045a; background: #eef1fb; border-radius: 6px; padding: 4px 6px; }
   .chip.none { font: 600 11px/1 system-ui, sans-serif; color: #7b7365; background: #f1eadd; }
+  /* Diagnosis detail: three numbered sections joined by a line, each step's result under it. */
+  .flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .flow .sec { position: relative; padding: 0 0 12px 24px; }
+  .flow .sec::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 1px; background: #e6ddcc; }
+  .flow .sec:last-child { padding-bottom: 0; } .flow .sec:last-child::before { display: none; }
+  .flow .sh { display: flex; gap: 8px; align-items: center; margin-left: -24px; font-size: 12px; font-weight: 600; color: #24211c; }
+  .flow .num { width: 17px; height: 17px; border-radius: 50%; background: #eef1fb; color: #00309f; font: 700 10px/17px system-ui, sans-serif; text-align: center; flex: none; }
+  .flow .sb { display: grid; gap: 5px; margin-top: 5px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
+  .kv dt { color: #7b7365; } .kv dd { margin: 0; color: #24211c; }
+  .gap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11.5px; }
+  .gap .gl { color: #7b7365; margin-right: 2px; } .gap .tag { background: #f8eadf; color: #9a3412; border-radius: 5px; padding: 2px 6px; }
+  .all summary { cursor: pointer; font-size: 11.5px; color: #00309f; margin-top: 4px; list-style: none; } .all summary::-webkit-details-marker { display: none; }
+  .all[open] summary { margin-bottom: 6px; }
   /* Prediction trail: the engine's steps as a short timeline. */
   .trail { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 2px solid #dfe4f6; display: grid; gap: 7px; }
   .trail li { position: relative; display: grid; gap: 2px; font-size: 12px; }
@@ -43,9 +57,12 @@ export const CARD_BODY_STYLE = `
   .fix { background: #f6f1e7; border-radius: 8px; padding: 8px 9px; font-size: 12.5px; }
   .fix ul { margin: 6px 0 0; padding-left: 16px; color: #4a453c; } .fix li { margin: 2px 0; }
   .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #e6ddcc; border-top-color: #00309f; animation: spin .8s linear infinite; flex: none; }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .steps li { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #24211c; }
-  .steps li.next { color: #a39a8a; } .steps li.done { color: #7b7365; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .steps li { display: grid; gap: 3px; font-size: 13px; color: #24211c; }
+  .steps .lab { display: flex; gap: 8px; align-items: center; }
+  .steps li.next { color: #a39a8a; } .steps li.done .lab { color: #7b7365; }
+  .steps .res { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-left: 20px; font-size: 12px; color: #4a453c; }
+  .steps .res span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .steps .res.more { color: #a39a8a; }
   .steps .tick { width: 12px; flex: none; color: #00309f; font-size: 12px; text-align: center; }
   .steps .dot { width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: #d8cfbe; flex: none; animation: none; }
 `;

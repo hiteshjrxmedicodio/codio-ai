@@ -30,6 +30,8 @@ export interface IcdStep {
   label: string;
   done?: number;
   total?: number;
+  found?: string[];
+  coded?: { phrase: string; code: string | null }[];
 }
 
 const STEPS: { key: IcdStep["step"]; label: string }[] = [
@@ -38,15 +40,29 @@ const STEPS: { key: IcdStep["step"]; label: string }[] = [
   { key: "codes", label: "Choosing the ICD-10 codes" },
 ];
 
-/** The three coding steps while they run: finished ones ticked, the current one spinning with its count. */
+const MAX_ROWS = 4;
+const more = (n: number) => (n > MAX_ROWS ? `<div class="res more">and ${n - MAX_ROWS} more</div>` : "");
+
+/** What a step has produced so far, shown under it: the diagnoses found, then each code as it lands. */
+function stepResult(key: IcdStep["step"], s: IcdStep): string {
+  if (key === "extract" && s.found?.length) {
+    return s.found.slice(0, MAX_ROWS).map((p) => `<div class="res">${esc(p)}</div>`).join("") + more(s.found.length);
+  }
+  if (key === "codes" && s.coded?.length) {
+    return s.coded.slice(-MAX_ROWS).map((c) => `<div class="res"><span>${esc(c.phrase)}</span>${c.code ? `<span class="chip">${esc(c.code)}</span>` : `<span class="chip none">Review</span>`}</div>`).join("");
+  }
+  return "";
+}
+
+/** The three coding steps while they run: finished ones ticked with what they found, the current one spinning with its count. */
 export function icdProgressCard(s: IcdStep): string {
   const at = STEPS.findIndex((x) => x.key === s.step);
   const rows = STEPS.map((x, i) => {
     const state = s.step === "done" || i < at ? "done" : i === at ? "now" : "next";
     const mark = state === "done" ? `<span class="tick">✓</span>` : state === "now" ? `<span class="spin"></span>` : `<span class="dot"></span>`;
-    const text = state === "now" ? s.label : x.label;
+    const label = x.key === "extract" && state === "done" && s.found ? `Found ${s.found.length} diagnos${s.found.length === 1 ? "is" : "es"}` : x.label;
     const count = state === "now" && s.total ? ` <span class="conf">${s.done ?? 0} of ${s.total}</span>` : "";
-    return `<li class="${state}">${mark}<span>${esc(text)}${count}</span></li>`;
+    return `<li class="${state}"><div class="lab">${mark}<span>${esc(label)}${count}</span></div>${stepResult(x.key, s)}</li>`;
   }).join("");
   return `${head("ICD-10 codes")}<div class="body"><ol class="steps">${rows}</ol></div>`;
 }
@@ -104,31 +120,46 @@ function stepLine(s: TrailStep): string {
   }
 }
 
-/** The engine's steps, top to bottom, ending in the code or the reason it stopped. */
-function trailBlock(d: CodedDiagnosis): string {
+/** Quotes without repeats: a quote already contained in a longer one is dropped. */
+function distinctQuotes(quotes: { text: string }[]): string[] {
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+  const texts = [...new Set(quotes.map((q) => q.text.trim()))].sort((x, y) => y.length - x.length);
+  const kept: string[] = [];
+  for (const t of texts) if (!kept.some((k) => norm(k).includes(norm(t)))) kept.push(t);
+  return kept;
+}
+
+const section = (n: number, title: string, body: string) =>
+  `<li class="sec"><div class="sh"><span class="num">${n}</span>${esc(title)}</div><div class="sb">${body}</div></li>`;
+
+/** The engine's walk: its key milestones up front, every step behind "Show all steps". */
+function routeBody(d: CodedDiagnosis): string {
   const t = d.trail;
-  if (!t) return d.status === "current" ? "" : `<div class="muted">Not sent for coding: ${esc((STATUS[d.status] ?? d.status).toLowerCase())}.</div>`;
+  if (!t) return `<div class="muted">${d.status === "current" ? "Not sent to the engine." : `Not sent for coding: ${esc((STATUS[d.status] ?? d.status).toLowerCase())}.`}</div>`;
   const li: string[] = [];
-  if (t.start.length) {
-    li.push(`<li><span class="what">Looked up the ICD-10 index</span>${t.start.map((h) => `<span class="sub">“${esc(h.term)}” → ${node(h.code, null)}</span>`).join("")}</li>`);
-  }
+  if (t.start.length) li.push(`<li><span class="what">Looked up the ICD-10 index</span>${t.start.map((h) => `<span class="sub">“${esc(h.term)}” → ${node(h.code, null)}</span>`).join("")}</li>`);
   li.push(...t.steps.map(stepLine));
-  li.push(
-    d.code
-      ? `<li class="end"><span class="what">Code: ${node(d.code, d.description)}</span>${t.fallback ? `<span class="sub">Proposed by the second opinion; worth a check.</span>` : ""}</li>`
-      : `<li class="stop"><span class="what">Not coded</span><span class="sub">${esc(d.reviewReason ?? "Needs review")}${d.candidates?.length ? ` · closest: ${esc(d.candidates.slice(0, 4).join(", "))}` : ""}</span></li>`,
-  );
-  return `<div class="group">Prediction trail</div><ol class="trail">${li.join("")}</ol>`;
+  const end = d.code
+    ? `<li class="end"><span class="what">Code: ${node(d.code, d.description)}</span>${t.fallback ? `<span class="sub">Proposed by the second opinion; worth a check.</span>` : ""}</li>`
+    : `<li class="stop"><span class="what">Not coded</span><span class="sub">${esc(d.reviewReason ?? "Needs review")}${d.candidates?.length ? ` · closest: ${esc(d.candidates.slice(0, 4).join(", "))}` : ""}</span></li>`;
+  const category = t.steps.find((x) => x.kind === "choice" && x.level === "category");
+  const key = [li[0], category ? stepLine(category) : "", end].filter(Boolean).join("");
+  return `<ol class="trail">${key}</ol><details class="all"><summary>Show all ${li.length + 1} steps</summary><ol class="trail">${li.join("")}${end}</ol></details>`;
 }
 
 export function icdDetailCard(d: CodedDiagnosis, index: number): string {
-  const quotes = d.quotes.map((q) => `<div class="muted quote" title="${esc(q.text)}">“${esc(q.text)}”</div>`).join("");
-  const params = (d.params?.documented ?? []).map((p) => `<div class="muted"><b style="color:#24211c">${esc(p.name)}:</b> ${esc(p.value)}</div>`).join("");
-  const missing = d.params?.missing.length ? `<div class="muted">Not documented: ${esc(d.params.missing.join("; "))}</div>` : "";
-  const code = d.code
+  const result = d.code
     ? `<div class="row"><span class="code">${esc(d.code)}</span><span class="desc">${esc(d.description ?? "")}</span></div>`
     : `<div class="row"><span class="muted" style="grid-column:1/-1">${esc(d.reviewReason ?? "Needs review")}</span></div>`;
-  return `${head(`ICD-10 · Diagnosis ${index + 1}`)}<div class="body"><b style="font-size:13.5px">${esc(d.phrase)}</b>${code}${quotes}
-    ${params}${missing}${trailBlock(d)}
+  const quotes = distinctQuotes(d.quotes);
+  const found = quotes.length
+    ? quotes.slice(0, 2).map((q) => `<div class="muted quote" title="${esc(q)}">“${esc(q)}”</div>`).join("") + (quotes.length > 2 ? `<div class="muted">and ${quotes.length - 2} more on the chart</div>` : "")
+    : `<div class="muted">No exact wording found.</div>`;
+  const documented = d.params?.documented ?? [];
+  const kv = documented.length ? `<dl class="kv">${documented.map((p) => `<dt>${esc(p.name)}</dt><dd>${esc(p.value)}</dd>`).join("")}</dl>` : "";
+  const missing = d.params?.missing.length ? `<div class="gap"><span class="gl">Not documented</span>${d.params.missing.map((m) => `<span class="tag">${esc(m)}</span>`).join("")}</div>` : "";
+  const details = kv || missing ? kv + missing : `<div class="muted">No coding details were read.</div>`;
+  return `${head(`ICD-10 · Diagnosis ${index + 1}`)}<div class="body"><b style="font-size:13.5px">${esc(d.phrase)}</b>${result}
+    <ol class="flow">${section(1, "Found in the report", found)}${section(2, "Coding details", details)}${section(3, "How the code was chosen", routeBody(d))}</ol>
     <div class="actions"><button class="btn ghost" data-action="icd-back">All diagnoses</button></div></div>`;
 }

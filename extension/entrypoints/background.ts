@@ -7,6 +7,7 @@ import { cancelRecording, startRecording, stopRecording } from "@/utils/bg/recor
 import { recallReport, rememberReport } from "@/utils/bg/reportCache";
 import { saveReview, type ReviewSave } from "@/utils/bg/reviewStore";
 import { companionSettings, get, post } from "@/utils/bg/service";
+import type { ScriptPublicPath } from "wxt/utils/inject-script";
 
 type Message = { type?: string; [key: string]: unknown };
 
@@ -27,6 +28,25 @@ async function openInViewer(tabId: number, url: string): Promise<void> {
   await browser.tabs.update(tabId, { url: `${browser.runtime.getURL(VIEWER)}?file=${encodeURIComponent(url)}` });
 }
 
+/**
+ * Chrome puts content scripts only into pages loaded after Codio was installed or reloaded. On
+ * install and on every reload, put them into the open tabs too, so the EMR page need not be
+ * reloaded; the copy from the old build notices the new one and switches itself off.
+ */
+const PAGE_SCRIPTS: ScriptPublicPath[] = ["/content-scripts/content.js"];
+const FRAME_SCRIPTS: ScriptPublicPath[] = ["/content-scripts/filler.js"];
+async function injectIntoOpenTabs(): Promise<void> {
+  // Pages still loading get the manifest's copy on their own; injecting there too would double it.
+  const tabs = await browser.tabs.query({ url: ["http://*/*", "https://*/*"], status: "complete" }).catch(() => []);
+  await Promise.all(
+    tabs.map(async (t) => {
+      if (t.id === undefined) return;
+      await browser.scripting.executeScript({ target: { tabId: t.id }, files: PAGE_SCRIPTS }).catch(() => undefined);
+      await browser.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: FRAME_SCRIPTS }).catch(() => undefined);
+    }),
+  );
+}
+
 export default defineBackground(() => {
   browser.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
   // The panel opens a port on load; accepted so the panel can tell it is connected.
@@ -44,7 +64,10 @@ export default defineBackground(() => {
   const sweep = () =>
     browser.tabs.query({}).then((tabs) => tabs.forEach((t) => t.id !== undefined && t.url && void openInViewer(t.id, t.url))).catch(() => undefined);
   browser.runtime.onStartup.addListener(sweep);
-  browser.runtime.onInstalled.addListener(sweep);
+  browser.runtime.onInstalled.addListener(() => {
+    sweep();
+    void injectIntoOpenTabs();
+  });
 
   browser.runtime.onMessage.addListener((message: Message, sender) => {
     switch (message?.type) {

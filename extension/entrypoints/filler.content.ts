@@ -15,7 +15,7 @@ type Armed = { sections: string[] };
 export default defineContentScript({
   matches: ["<all_urls>"],
   allFrames: true,
-  main() {
+  main(ctx) {
     let armed: Armed | null = null;
     let tag: HTMLElement | null = null;
     let text: HTMLElement | null = null;
@@ -113,6 +113,8 @@ export default defineContentScript({
       document.removeEventListener("keydown", onKey, true);
     }
 
+    // A stale copy (Codio reloaded) drops out of fill mode instead of answering with errors.
+    ctx.onInvalidated(disarm);
     browser.runtime.onMessage.addListener((message: { type?: string; sections?: string[] }) => {
       if (message?.type === "fill:arm") {
         arm({ sections: message.sections ?? [] });

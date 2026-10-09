@@ -109,6 +109,10 @@ started; on web pages the companion simply stays off until the next load. Hold â
 Click elsewhere returns it to the pill and clears the highlight. Code: `extension/entrypoints/content/
 companion.ts` (controller), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
 `selection.ts`, `pushToTalk.ts`; recording via `entrypoints/offscreen/`. The side panel remains for chat.
+Reloading Codio in `chrome://extensions` puts a fresh content script into every open http(s) tab
+(`background.ts` `injectIntoOpenTabs`, on `onInstalled`); the copy left by the old build sees the new one
+(WXT's content-script context) and switches itself off, so the EMR page need not be reloaded and no
+"Extension context invalidated" errors pile up.
 
 **ICD pipeline.** On a report the provider allowed, it runs automatically: diagnosis extraction (`P-DX-EXTRACT`, each
 diagnosis with the exact phrases that state it, highlighted and numbered on the report) â†’ coding parameters per

@@ -34,13 +34,16 @@ function stopCompanion(): void {
 
 export default defineContentScript({
   matches: ["<all_urls>"],
-  main() {
-    watchForChanges();
+  main(ctx) {
+    watchForChanges(ctx);
+    // Codio was reloaded (or a fresh copy of this script arrived): this copy switches off.
+    ctx.onInvalidated(stopCompanion);
     // The companion is on every page by default; the background says whether it is enabled.
     if (window.top === window) {
       browser.runtime
         .sendMessage({ type: "companion:config" })
-        .then((cfg: CompanionConfig | undefined) => cfg?.enabled && startCompanion(cfg))
+        // A copy made stale while waiting (a newer copy arrived) must not start a second companion.
+        .then((cfg: CompanionConfig | undefined) => cfg?.enabled && ctx.isValid && startCompanion(cfg))
         .catch(() => undefined);
     }
     browser.runtime.onMessage.addListener((message: ContentRequest) => {
@@ -48,7 +51,7 @@ export default defineContentScript({
         case "companion:on":
           browser.runtime
             .sendMessage({ type: "companion:config" })
-            .then((cfg: CompanionConfig | undefined) => cfg && startCompanion({ ...cfg, enabled: true }))
+            .then((cfg: CompanionConfig | undefined) => cfg && ctx.isValid && startCompanion({ ...cfg, enabled: true }))
             .catch(() => undefined);
           return Promise.resolve({ ok: true });
         case "companion:prediction":

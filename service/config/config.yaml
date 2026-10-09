@@ -185,6 +185,12 @@ icd_pipeline:
 # (OpenAI embedding, optional dense + BM25 rerank) → one code per procedure. Ported from the
 # Codio engine's procedure extraction (P022) and final selection (P023, Pinecone path).
 # P-CPT-SELECT is the instructions for the Decisions API and for the Gemini fallback alike.
+# What "Code it" runs after CDI. Turn ICD-10 and/or the CPT pipeline off to test CDI alone; the run
+# then stops after CDI and the companion shows only the cards that ran.
+report_run:
+  icd: true
+  cpt: true
+
 cpt_pipeline:
   # gemini: on near-identical candidates (colonoscopy vs colonoscopy through stoma, dense 0.822 vs 0.815) the
   # Decisions API chose the stoma code 3/3 at up to 0.99; Gemini chose correctly 3/3 with a cited rationale.

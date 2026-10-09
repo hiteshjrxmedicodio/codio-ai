@@ -1,15 +1,17 @@
+import { getConfig } from "../../core/config";
 import { redactBlocks } from "../../core/privacy/redact";
 import type { Usage } from "../../core/types";
-import { normalizeReport } from "../cdi/normalize/normalize";
+import { normalizeReport, type CdiChange, type CdiFlag } from "../cdi/normalize/normalize";
 import { predictCpt, type CptResult } from "../cpt/pipeline";
 import type { Block } from "../icd/extract";
 import { predictIcd, type IcdStep } from "../icd/pipeline";
 
 export interface CodesRun {
-  /** `changed`: indexes of the blocks CDI rewrote; the rest came back as they were. */
-  cdi: { blocks: Block[]; confidence: number; changed: number[]; error?: string };
-  icd: Awaited<ReturnType<typeof predictIcd>> | { error: string };
-  cpt: CptResult | { error: string };
+  /** `changed`: indexes of the blocks CDI rewrote; `changes` and `flags`: its trail, what it changed and left as written. */
+  cdi: { blocks: Block[]; confidence: number; changed: number[]; changes: CdiChange[]; flags: CdiFlag[]; error?: string };
+  /** `skipped`: that part is turned off in config.yaml (report_run), so the run stopped after CDI for it. */
+  icd: Awaited<ReturnType<typeof predictIcd>> | { error: string } | { skipped: string };
+  cpt: CptResult | { error: string } | { skipped: string };
   usage: Usage[];
 }
 
@@ -33,17 +35,19 @@ export async function runCodes(
   try {
     const r = await normalizeReport(blocks);
     usage.push(r.usage);
-    cdi = { blocks: r.blocks, confidence: r.confidence, changed: r.blocks.flatMap((b, i) => (b.text !== blocks[i]?.text ? [i] : [])) };
+    cdi = { blocks: r.blocks, confidence: r.confidence, changes: r.changes, flags: r.flags, changed: r.blocks.flatMap((b, i) => (b.text !== blocks[i]?.text ? [i] : [])) };
   } catch (err) {
-    cdi = { blocks, confidence: 0, changed: [], error: failed(err).error };
+    cdi = { blocks, confidence: 0, changed: [], changes: [], flags: [], error: failed(err).error };
   }
 
   // CDI's card can fill now; ICD and CPT each report the moment they settle, not when both do.
   onPart("cdi", cdi);
   const report = <T>(key: "icd" | "cpt", r: T) => (onPart(key, r), r);
+  const on = getConfig().report_run;
+  const off = (key: "icd" | "cpt") => Promise.resolve({ skipped: `Turned off (report_run.${key} in config.yaml)` });
   const [icd, cpt] = await Promise.all([
-    predictIcd(blocks, onStep, cdi.blocks).catch(failed).then((r) => report("icd", r)),
-    predictCpt(cdi.blocks).catch(failed).then((r) => report("cpt", r)),
+    (on.icd ? predictIcd(blocks, onStep, cdi.blocks).catch(failed) : off("icd")).then((r) => report("icd", r)),
+    (on.cpt ? predictCpt(cdi.blocks).catch(failed) : off("cpt")).then((r) => report("cpt", r)),
   ]);
   if ("usage" in icd) usage.push(...icd.usage);
   if ("usage" in cpt) usage.push(...cpt.usage);

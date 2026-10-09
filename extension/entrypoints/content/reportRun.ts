@@ -3,7 +3,7 @@
  * moment CDI finishes, then the ICD-10 and CPT pipeline cards each fill as their own part finishes.
  * Also the reply in the shapes the companion keeps, and the CDI and CPT cards' list and detail views.
  */
-import type { CardId } from "./companionUi/dock";
+import { removeCard, type CardId } from "./companionUi/dock";
 import { icdProgressCard, type CodedDiagnosis } from "./companionUi/icdCards";
 import { cdiDetailCard, cdiListCard, cdiLoading, cptDetailCard, cptListCard, cptLoading, type CdiView, type CptView } from "./companionUi/runCards";
 import { runIcdJob } from "./icdJob";
@@ -14,20 +14,36 @@ export interface RunView {
 }
 
 type Page = { heading: string; text: string }[];
-type CdiReply = { blocks: { heading: string; text: string }[]; confidence: number; changed: number[]; error?: string };
-type CptReply = Partial<CptView> & { error?: string };
+type CdiReply = {
+  blocks: { heading: string; text: string }[];
+  confidence: number;
+  changed: number[];
+  changes?: { index: number; kind: string; before: string; after: string; reason: string }[];
+  flags?: { index: number; text: string; reason: string }[];
+  error?: string;
+};
+type CptReply = Partial<CptView> & { error?: string; skipped?: string };
 
 interface Reply {
   cdi?: CdiReply;
-  icd?: { diagnoses?: CodedDiagnosis[]; engineError?: string; error?: string };
+  /** `skipped`: turned off in the service's config (report_run), so only CDI ran for it. */
+  icd?: { diagnoses?: CodedDiagnosis[]; engineError?: string; error?: string; skipped?: string };
   cpt?: CptReply;
   error?: string;
 }
 
 /** `page` is the report as read from the page, so CDI's card can show each section as written. */
 function cdiView(c: CdiReply | undefined, page: Page): CdiView {
+  // Every section CDI rewrote or left something in, in page order, with its own part of the trail.
+  const shown = [...new Set([...(c?.changed ?? []), ...(c?.flags ?? []).map((f) => f.index)])].sort((a, b) => a - b);
   return {
-    sections: (c?.changed ?? []).map((i) => ({ heading: page[i]?.heading ?? "", original: page[i]?.text ?? "", cleaned: c?.blocks[i]?.text ?? "" })),
+    sections: shown.map((i) => ({
+      heading: page[i]?.heading ?? "",
+      original: page[i]?.text ?? "",
+      cleaned: c?.blocks[i]?.text ?? "",
+      changes: (c?.changes ?? []).filter((x) => x.index === i),
+      flags: (c?.flags ?? []).filter((x) => x.index === i),
+    })),
     total: page.filter((b) => b.text.trim()).length,
     confidence: c?.confidence ?? 0,
     error: c?.error,
@@ -35,16 +51,20 @@ function cdiView(c: CdiReply | undefined, page: Page): CdiView {
 }
 
 const cptView = (p: CptReply | undefined): CptView => ({
+  off: Boolean(p?.skipped),
   status: p?.status ?? "",
   procedures: p?.procedures ?? [],
   codes: p?.codes ?? [],
   error: p?.error ?? (p?.codes ? undefined : "no result came back"),
 });
 
-export function readRun(r: Reply, page: Page): { icd: { diagnoses: CodedDiagnosis[]; engineError?: string }; run: RunView } {
+/** `icd` is undefined when ICD-10 is turned off for this run, so no ICD-10 card is shown. */
+export function readRun(r: Reply, page: Page): { icd?: { diagnoses: CodedDiagnosis[]; engineError?: string }; run: RunView } {
   if (r.error || !r.icd) throw new Error(r.error ?? "no result came back");
+  const run = { cdi: cdiView(r.cdi, page), cpt: cptView(r.cpt) };
+  if (r.icd.skipped) return { run };
   if (r.icd.error || !r.icd.diagnoses) throw new Error(r.icd.error ?? "no diagnoses came back");
-  return { icd: { diagnoses: r.icd.diagnoses, engineError: r.icd.engineError }, run: { cdi: cdiView(r.cdi, page), cpt: cptView(r.cpt) } };
+  return { icd: { diagnoses: r.icd.diagnoses, engineError: r.icd.engineError }, run };
 }
 
 type Show = (html: string, where: CardId, focus?: boolean) => void;
@@ -60,7 +80,8 @@ export function runReport(page: Page, show: Show): Promise<Reply> {
   let shown = "";
   return runIcdJob<Reply>(
     page,
-    (step) => step.step !== "cdi" && show(icdProgressCard(step), "icd", false),
+    // CDI's step shows in the CDI card, and "done" never opens an ICD-10 card the run may not have.
+    (step) => step.step !== "cdi" && step.step !== "done" && show(icdProgressCard(step), "icd", false),
     "codes",
     (partial) => {
       const p = partial as Reply;
@@ -71,7 +92,8 @@ export function runReport(page: Page, show: Show): Promise<Reply> {
       }
       if (p.cpt && !shown.includes("cpt")) {
         shown += "cpt";
-        show(cptListCard(cptView(p.cpt)), "cpt", false);
+        if (p.cpt.skipped) removeCard("cpt");
+        else show(cptListCard(cptView(p.cpt)), "cpt", false);
       }
     },
   );
@@ -85,7 +107,8 @@ let openProc: number | null = null;
 export function renderRun(show: Show, run: RunView, focus = false): void {
   const section = openCdi === null ? undefined : run.cdi.sections[openCdi];
   show(section ? cdiDetailCard(section) : cdiListCard(run.cdi), "cdi", focus && openCdi !== null);
-  show(openProc === null ? cptListCard(run.cpt) : cptDetailCard(run.cpt, openProc), "cpt", focus && openProc !== null);
+  if (run.cpt.off) removeCard("cpt");
+  else show(openProc === null ? cptListCard(run.cpt) : cptDetailCard(run.cpt, openProc), "cpt", focus && openProc !== null);
 }
 
 /** The CDI and CPT card buttons. True when the click was one of theirs. */

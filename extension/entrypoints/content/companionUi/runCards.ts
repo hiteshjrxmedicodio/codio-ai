@@ -5,10 +5,20 @@
  */
 import { esc, head, loadingCard, messageCard } from "./cards";
 
+export interface CdiChange {
+  kind: string;
+  before: string;
+  after: string;
+  reason: string;
+}
+
 export interface CdiSection {
   heading: string;
   original: string;
   cleaned: string;
+  /** CDI's trail for this section: each change it made, and what it was unsure of and left as written. */
+  changes: CdiChange[];
+  flags: { text: string; reason: string }[];
 }
 
 export interface CdiView {
@@ -33,6 +43,8 @@ export interface CptProcedure {
 }
 
 export interface CptView {
+  /** Turned off in the service's config for this run: no CPT card. */
+  off?: boolean;
   status: string;
   procedures: CptProcedure[];
   codes: { code: string; modifier: string; description: string; confidence: number; procedure: string }[];
@@ -50,16 +62,43 @@ export function cdiListCard(v: CdiView): string {
   if (v.error) return messageCard("CDI", `CDI couldn't run, so coding read the report as written. ${v.error}`);
   if (!v.sections.length) return `${head("CDI · nothing to clean")}<div class="body"><div class="muted">All ${v.total} sections were already clear; coding read them as written.</div></div>`;
   const rows = v.sections
-    .map((s, i) => `<button class="dx" data-action="cdi" data-index="${i}" title="Show before and after"><span class="ph">${esc(s.heading || "(no heading)")}</span><span class="chip">Cleaned</span></button>`)
+    .map((s, i) => {
+      const n = s.changes.length;
+      const label = n ? `${n} change${n === 1 ? "" : "s"}` : "Checked";
+      return `<button class="dx" data-action="cdi" data-index="${i}" title="Show what CDI changed"><span class="ph">${esc(s.heading || "(no heading)")}</span><span class="chip${n ? "" : " none"}">${label}</span></button>`;
+    })
     .join("");
-  return `${head(`CDI · ${v.sections.length} of ${v.total} sections cleaned`)}<div class="body">${rows}
+  const n = v.sections.reduce((t, s) => t + s.changes.length, 0);
+  return `${head(`CDI · ${n} change${n === 1 ? "" : "s"} in ${v.sections.length} of ${v.total} sections`)}<div class="body">${rows}
     <div class="muted">Diagnoses and procedures were read from the cleaned text. Nothing on the page was changed.</div></div>`;
+}
+
+const KIND: Record<string, string> = {
+  abbreviation: "Expanded abbreviation",
+  interpretation: "Interpreted reference (inferred, check it)",
+  reference: "Resolved reference",
+  spelling: "Corrected spelling",
+  normalization: "Normalised",
+  removal: "Removed",
+  split: "Split onto separate lines",
+  copy: "Copied into the assessment",
+};
+
+/** CDI's trail for one section: each change as before → after with its reason, in the order made. */
+function changeTrail(s: CdiSection): string {
+  if (!s.changes.length) return `<div class="muted">No changes; the text was already clear.</div>`;
+  const items = s.changes.map((c) =>
+    li(esc(KIND[c.kind] ?? c.kind), `${c.before ? `<s>${esc(c.before)}</s> → ` : ""}<b>${esc(c.after || "(removed)")}</b>${c.reason ? `<br>${esc(c.reason)}` : ""}`),
+  );
+  return `<ol class="trail">${items.join("")}</ol>`;
 }
 
 export function cdiDetailCard(s: CdiSection): string {
   const text = (t: string) => `<div class="muted" style="white-space:pre-wrap">${esc(t)}</div>`;
+  const left = s.flags.length ? section("Left as written", `<ol class="trail">${s.flags.map((f) => li(esc(f.text), esc(f.reason), "stop")).join("")}</ol>`) : "";
+  const full = `<details class="all"><summary>Show the whole section, before and after</summary>${section("As written", text(s.original))}${section("After CDI", text(s.cleaned))}</details>`;
   return `${head("CDI · Section")}<div class="body"><b style="font-size:13.5px">${esc(s.heading || "(no heading)")}</b>
-    <div class="flow">${section("As written", text(s.original))}${section("After CDI", text(s.cleaned))}</div>
+    <div class="flow">${section("What CDI changed", changeTrail(s))}${left}${full}</div>
     <div class="actions"><button class="btn ghost" data-action="cdi-back">All sections</button></div></div>`;
 }
 

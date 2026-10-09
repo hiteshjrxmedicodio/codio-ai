@@ -286,12 +286,12 @@ async function readReport(reuse = false): Promise<void> {
     if (!isCoding(key)) {
       const saved = reuse ? await send<Remembered | null>({ type: "report:recall", key }).catch(() => null) : null;
       const usable = saved?.report?.icd ? saved : null;
-      show(card.loadingCard("ICD-10 codes", usable ? "Bringing back your codes…" : "Reading the whole report…"), "icd");
+      show(card.loadingCard("Medical coding", usable ? "Bringing back your codes…" : "Reading the whole report…"), "icd");
       const page = await readWholeReport(MAX_SCROLL_STEPS);
       if (!here()) return;
       const print = await fingerprint(page.blocks);
       if (usable?.fingerprint === print) return void ((fp = print), present(usable.report));
-      if (usable) show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
+      if (usable) show(card.loadingCard("Medical coding", "The report changed since last time. Coding it again…"), "icd");
       remember("allowed");
       // A job for this page may have started while the report was read (a second click): follow that one.
       const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
@@ -308,7 +308,7 @@ async function readReport(reuse = false): Promise<void> {
     if (q) void askByVoice(q);
   } catch (err) {
     if (here()) {
-      show(card.messageCard("ICD-10 codes", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
+      show(card.messageCard("Medical coding", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "icd");
       dock.removeCard("cpt");
     }
   }

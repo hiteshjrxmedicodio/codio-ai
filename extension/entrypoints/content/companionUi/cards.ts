@@ -59,8 +59,8 @@ export function predictionCard(id: "icd" | "cpt" | "final", list: Code[]): strin
 }
 
 export function permissionCard(): string {
-  return `${head("ICD-10 codes")}<div class="body">
-    <div><b style="font-size:13.5px">Code this report?</b><div class="muted">I'll read it end to end, pick out each diagnosis and predict its ICD-10 code. Names and IDs are removed before anything is analysed.</div></div>
+  return `${head("Medical coding")}<div class="body">
+    <div><b style="font-size:13.5px">Code this report?</b><div class="muted">I'll read it end to end, tidy the wording, pick out every diagnosis and procedure, and predict the ICD-10 and CPT codes. Names and IDs are removed before anything is analysed.</div></div>
     <div class="actions"><button class="btn primary" data-action="allow">Code it</button><button class="btn ghost" data-action="deny">Not now</button></div></div>`;
 }
 

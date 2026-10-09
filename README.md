@@ -100,7 +100,7 @@ answered from the open report in summary mode, or sent to the chat otherwise. An
 pointer and changes shape in place: highlight text → code card (code and name only, placed beside the
 highlight and kept on screen); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
 "Assessment:", never its running text, so a page written about coding is not mistaken for one; nothing sent) →
-permission card ("Code this report?") → on yes, the whole report is read and the ICD pipeline runs on it (no
+permission card ("Medical coding · Code this report?", naming CDI, ICD-10 and CPT) → on yes, the whole report is read and the report run codes it (no
 summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
 and each phrase is highlighted and numbered on the report. Clicking a phrase, in the card or on the chart
 (the highlighted words or their marker, `annotate.ts`), opens that diagnosis: its code, the documented

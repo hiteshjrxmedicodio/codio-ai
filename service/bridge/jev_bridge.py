@@ -1,11 +1,11 @@
 """Bridge from the Codio service to the Jev ICD engine (evidence routing).
 
-Reads {"units": [...], "provider": "decisions"|"jev", "gemini": bool, "gemini_model": str, "workers": int,
+Reads {"units": [...], "provider": "claude"|"decisions"|"jev", "gemini": bool, "gemini_model": str, "workers": int,
 "dry": bool} as JSON on
 stdin and writes one JSON result per unit on stdout. The engine's own folder is passed with --jev;
 nothing in that folder is modified. Uses only the standard library, like the engine.
-The engine's pick-one questions go to the OpenAI Decisions API by default (provider "decisions",
-OPENAI_API_KEY), or to Jev (provider "jev", TYPESAFE_API_KEY). GEMINI_API_KEY powers the optional fallback.
+The engine's pick-one questions go to Claude (provider "claude", ANTHROPIC_API_KEY, the anthropic package),
+the OpenAI Decisions API (provider "decisions", OPENAI_API_KEY), or Jev (provider "jev", TYPESAFE_API_KEY). GEMINI_API_KEY powers the optional fallback.
 """
 import argparse, json, os, sys, threading
 from concurrent.futures import ThreadPoolExecutor
@@ -40,7 +40,19 @@ def main():
         config = RecoveryConfig(max_questions=None, retrieval_limit=int(req.get('retrieval_limit', 8)))
 
     provider = req.get('provider', 'decisions')
-    if provider == 'decisions':
+    if provider == 'claude':
+        key = os.environ.get('ANTHROPIC_API_KEY')
+        if not key and not dry:
+            print(json.dumps({'error': 'ANTHROPIC_API_KEY is not set'}))
+            return
+        try:
+            from claude_adapter import install as install_claude
+        except ImportError:
+            print(json.dumps({'error': 'The anthropic Python package is not installed for ' + sys.executable +
+                              '. Install it there, or point icd_pipeline.python at a Python that has it.'}))
+            return
+        install_claude(R, key, req.get('claude_model') or 'claude-sonnet-5-5', req.get('claude_effort') or 'low')
+    elif provider == 'decisions':
         key = os.environ.get('OPENAI_API_KEY')
         if not key and not dry:
             print(json.dumps({'error': 'OPENAI_API_KEY is not set'}))

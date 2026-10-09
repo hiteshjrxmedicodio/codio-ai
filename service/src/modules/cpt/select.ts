@@ -20,7 +20,8 @@ export interface Selection {
   description: string;
   confidence: number;
   rationale: string;
-  source: "decisions" | "P-CPT-SELECT";
+  /** "decisions", or the model that answered the P-CPT-SELECT block. */
+  source: string;
 }
 
 const SCHEMA = {
@@ -48,8 +49,8 @@ const procLine = (t: ToCode) =>
 
 const descriptorOf = (t: ToCode, code: string) => t.candidates.find((c) => c.code === code.trim().toUpperCase())?.descriptor ?? "";
 
-/** Fallback: every remaining procedure with its own candidates in one Gemini call, matched back by index. */
-async function viaGemini(items: ToCode[], report: string): Promise<{ selections: Selection[]; usage: Usage }> {
+/** Every remaining procedure with its own candidates in one call to the P-CPT-SELECT block's model, matched back by index. */
+async function viaBlock(items: ToCode[], report: string): Promise<{ selections: Selection[]; usage: Usage }> {
   const procedures = items
     .map((t) => `${procLine(t)}\nCANDIDATES\n${t.candidates.map((c) => `${c.code}: ${c.descriptor}`).join("\n")}`)
     .join("\n\n");
@@ -63,14 +64,15 @@ async function viaGemini(items: ToCode[], report: string): Promise<{ selections:
     const t = byIndex.get(s.procedure_index);
     if (!t || !s.code.trim()) return [];
     const code = s.code.trim().toUpperCase();
-    return [{ index: t.index, code, description: descriptorOf(t, code), confidence: Math.min(1, Math.max(0, s.confidence)), rationale: s.rationale, source: BLOCK_ID } as Selection];
+    return [{ index: t.index, code, description: descriptorOf(t, code), confidence: Math.min(1, Math.max(0, s.confidence)), rationale: s.rationale, source: usage.model } as Selection];
   });
   return { selections, usage };
 }
 
 /**
  * One code per procedure from its own candidates. A pick-one question per procedure, so the
- * Decisions API answers them all in one request; Gemini answers whatever it errors on or refuses.
+ * Decisions API can answer them all in one request (select_provider openai_decisions); the block's own
+ * model answers by default and whatever Decisions errors on or refuses.
  */
 export async function selectCodes(items: ToCode[], report: string): Promise<{ selections: Selection[]; usage: Usage[] }> {
   const out: Selection[] = [];
@@ -91,12 +93,12 @@ export async function selectCodes(items: ToCode[], report: string): Promise<{ se
         out.push({ index: t.index, code: a.choice, description: descriptorOf(t, a.choice), confidence: a.confidence ?? 0, rationale: "", source: "decisions" });
       }
     } catch {
-      // Decisions unavailable: everything falls back to Gemini below.
+      // Decisions unavailable: everything falls back to the block's model below.
     }
   }
   const done = new Set(out.map((s) => s.index));
   const rest = items.filter((t) => !done.has(t.index));
   if (!rest.length) return { selections: out, usage: [] };
-  const g = await viaGemini(rest, report);
+  const g = await viaBlock(rest, report);
   return { selections: [...out, ...g.selections], usage: [g.usage] };
 }

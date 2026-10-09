@@ -103,6 +103,8 @@ export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string
         units,
         provider: cfg.provider,
         decisions_model: cfg.decisions_model,
+        claude_model: cfg.claude_model,
+        claude_effort: cfg.claude_effort,
         decisions_url: `${getConfig().openai.base_url}/decisions`,
         workers: cfg.workers,
         retrieval_limit: cfg.retrieval_limit,

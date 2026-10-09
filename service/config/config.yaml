@@ -18,6 +18,12 @@ openai:
   decisions_model: gpt-6-luna
   transcribe_model: whisper-1
 
+# Claude (provider: anthropic blocks, and the ICD engine's questions when icd_pipeline.provider is claude).
+anthropic:
+  api_key_env: ANTHROPIC_API_KEY
+  timeout_ms: 300000
+  refusal_fallback: true         # on a safety decline, the API re-runs the request on Anthropic's recommended fallback model
+
 # One entry per prompt. thinking: a level (minimal|low|medium|high) or an integer token budget.
 # Gemini thinks adaptively when this is omitted and bills it as output, so it is always set.
 blocks:
@@ -27,13 +33,18 @@ blocks:
   P-READ-SCREEN: { prompt: reading/p_read_screen.txt,      model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 16384, enabled: true }
   P-REPORT-ASK:  { prompt: report/p_report_ask.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 2048,  enabled: true }
   P-SUMMARIZE:   { prompt: report/p_summarize_report.txt,   model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 8192,  enabled: true }
-  P-DX-EXTRACT:  { prompt: coding/p_dx_extract.txt,        model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 8192,  enabled: true }
-  P-DX-PARAMS:   { prompt: coding/p_dx_params.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 2048,  enabled: true }
+  # The report run (CDI, diagnoses, ICD-10 details, procedures, CPT) runs on Claude Sonnet 5.5. On anthropic,
+  # thinking is Claude's effort and counts toward max_output_tokens, so these allow room; temperature is not sent.
+  # DXEX, ported from the Codio engine: P005 (phrases) then P006 (attributes and bucket).
+  P-DXEX-EXTRACT:  { provider: anthropic, prompt: coding/p_dxex_extract.txt,  model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
+  P-DXEX-CLASSIFY: { provider: anthropic, prompt: coding/p_dxex_classify.txt, model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
+  P-DX-EXTRACT:  { provider: anthropic, prompt: coding/p_dx_extract.txt, model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 32000, enabled: true }
+  P-DX-PARAMS:   { provider: anthropic, prompt: coding/p_dx_params.txt,  model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 16000, enabled: true }
   P-ICD-CODE:    { prompt: coding/p_icd_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
   P-CPT-CODE:    { prompt: coding/p_cpt_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
-  P-CDI-NORMALIZE: { prompt: coding/p_cdi_normalize.txt,  model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 32768, enabled: true }
-  P-PROC-EXTRACT: { prompt: coding/p_proc_extract.txt,     model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 8192,  enabled: true }
-  P-CPT-SELECT:  { prompt: coding/p_cpt_select.txt,        model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 8192,  enabled: true }
+  P-CDI-NORMALIZE: { provider: anthropic, prompt: coding/p_cdi_normalize.txt, model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 64000, enabled: true }
+  P-PROC-EXTRACT:  { provider: anthropic, prompt: coding/p_proc_extract.txt,  model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
+  P-CPT-SELECT:    { provider: anthropic, prompt: coding/p_cpt_select.txt,    model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
   P-READ-FILE:   { prompt: reading/p_read_file.txt,         model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 32768, enabled: true }
   P-READ-MAP:    { prompt: reading/p_read_section_map.txt, model: gemini-3.8-flash,      thinking: low,     temperature: 0,   max_output_tokens: 16384, enabled: true }
   P-CON:  { prompt: cdi/p_con_contradictions.txt, model: gemini-3.8-flash, thinking: medium, temperature: 0, max_output_tokens: 8192, enabled: true }
@@ -175,25 +186,39 @@ companion:
 # are answered by `provider`: decisions = OpenAI Decisions API (OPENAI_API_KEY), jev = Jev (TYPESAFE_API_KEY).
 # Clinical state sent to either is redacted first.
 icd_pipeline:
-  provider: decisions
+  provider: decisions               # decisions (OpenAI Decisions API, GPT) | claude (Anthropic SDK; needs the anthropic package in the python below) | jev
+  claude_model: claude-sonnet-5-5
+  claude_effort: low                # the engine asks many small pick-one questions per diagnosis
   decisions_model: gpt-6-luna
   jev_path: engine/jev_icd_engine   # relative to service/; CMS FY2026 tables, no chart data
   python: python3
   workers: 6
   retrieval_limit: 8
-  gemini_fallback: true
+  gemini_fallback: false            # Jev engine only: no Gemini second opinion
   gemini_model: gemini-3.8-flash
   timeout_ms: 300000
-  # Which extracted statuses go on to coding. A historical diagnosis is coded in its personal-history
-  # (or old / sequela) form; uncertain and ruled-out ones are listed but never coded.
-  include_statuses: [current, historical]
-  history_candidates: 8             # history-form codes from the tabular offered to the pick for a historical diagnosis
+  # Which extracted diagnoses go on to coding: the Codio engine's DXEX filter, same semantics. A diagnosis
+  # is kept when it matches every pair of ANY include group (empty: keep all), then dropped when it matches
+  # every pair of ANY exclude group. yes/no and true/false compare equal. Same as the engine's gastro
+  # operative filter: confirmed and codeable (both decided by P-DXEX-CLASSIFY).
+  diagnosis_filters:
+    include:
+      - { is_confirmed: true, is_codeable: true }
+    exclude: []
+  # The client's coding constraints (the engine's CLIENT_CONSTRAINTS_CODING and HELP), given to
+  # P-DXEX-EXTRACT with each report: conditions never extracted, and pairs never merged as one.
+  client_constraints:
+    never_extract: [Hyperglycemia, Hypoglycemia, Redundant colon, Hill grade, Body mass index / BMI, tortuous colon]
+    distinct:
+      - [Hematochezia, Rectal bleeding / bright red blood per rectum]
+  history_direct_pick: false        # Jev only. true: history.ts codes history from tabular history-form codes first
+  history_candidates: 8             # history-form codes from the tabular offered to that pick
   param_concurrency: 6
 
 # Report → procedures (with completion status) → CPT candidates per procedure from Pinecone
 # (OpenAI embedding, optional dense + BM25 rerank) → one code per procedure. Ported from the
 # Codio engine's procedure extraction (P022) and final selection (P023, Pinecone path).
-# P-CPT-SELECT is the instructions for the Decisions API and for the Gemini fallback alike.
+# P-CPT-SELECT is the instructions for its block's model and, with select_provider openai_decisions, for the Decisions API.
 # Sections that are history, not this encounter. Nothing under these headings is coded (ICD-10, CPT) or
 # reviewed (CDI suggestions); CDI cleaning still reads them so the page's text stays whole. Matched on
 # the heading only, case-insensitively, as the whole heading or one of its words; a bare "history" only
@@ -211,9 +236,9 @@ report_run:
   cpt: true
 
 cpt_pipeline:
-  # gemini: on near-identical candidates (colonoscopy vs colonoscopy through stoma, dense 0.822 vs 0.815) the
-  # Decisions API chose the stoma code 3/3 at up to 0.99; Gemini chose correctly 3/3 with a cited rationale.
-  select_provider: gemini   # openai_decisions | gemini
+  # block: on near-identical candidates (colonoscopy vs colonoscopy through stoma, dense 0.822 vs 0.815) the
+  # Decisions API chose the stoma code 3/3 at up to 0.99; a generating model chose correctly with a cited rationale.
+  select_provider: block   # block: the P-CPT-SELECT block's own model (Claude) | openai_decisions
   attempted_modifier: "-53"           # stamped on a discontinued procedure's code; exempt from the gate
   gate_threshold: 0.6                 # selections below this confidence are dropped; 0 keeps all
   report_max_chars: 12000             # report text sent with the selection as evidence

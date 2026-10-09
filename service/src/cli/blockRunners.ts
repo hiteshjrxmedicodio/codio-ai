@@ -13,6 +13,7 @@ import { transcribeAndClean } from "../modules/voice/voice";
 import { extractProcedures } from "../modules/cpt/extract";
 import { predictCpt } from "../modules/cpt/pipeline";
 import { extractDiagnoses } from "../modules/icd/extract";
+import { extractDxex } from "../modules/icd/dxex";
 import { normalizeReport } from "../modules/cdi/normalize/normalize";
 import { runCodes } from "../modules/codes/run";
 import { readChart, readImageBase64, readJson } from "./chartFile";
@@ -69,6 +70,8 @@ export const RUNNERS: Record<string, (input: BlockInput) => Promise<unknown>> = 
   // Selection needs retrieved candidates, so it runs as the whole pipeline.
   "P-CPT-SELECT": (i) => predictCpt(blocksOf(i)),
   "P-DX-EXTRACT": (i) => extractDiagnoses(blocksOf(i)),
+  // Both DXEX steps (P-DXEX-EXTRACT then P-DXEX-CLASSIFY), before the filter.
+  DXEX: (i) => extractDxex(blocksOf(i)),
   "P-CDI-NORMALIZE": (i) => normalizeReport(blocksOf(i)),
   "CODES-RUN": (i) => runCodes(blocksOf(i)),
   "CODE-SCREEN": async (i) => runCodeScreen(sectionsOf(i), i.setting ?? "unknown"),

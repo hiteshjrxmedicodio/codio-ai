@@ -3,7 +3,8 @@ import { getConfig } from "../../core/config";
 import { mapLimit } from "../../core/limit";
 import { redactBlocks, redactText } from "../../core/privacy/redact";
 import type { Usage } from "../../core/types";
-import { extractDiagnoses, predictParameters, type Block, type Diagnosis, type DxParameters } from "./extract";
+import { detailsOf, extractDxex, filterReason, toDiagnosis, type DxexDiagnosis, type DxexResult } from "./dxex";
+import type { Block, Diagnosis, DxParameters } from "./extract";
 import { HISTORY_NOTE, asHistoryPhrase, baseUid, codeHistory, historyUid, pickHistory } from "./history";
 import { runJev, type JevResult, type JevTrail, type JevUnit } from "./jev";
 
@@ -12,6 +13,8 @@ export const PredictBodySchema = z.object({
 });
 
 export interface CodedDiagnosis extends Diagnosis {
+  /** The engine-ported extraction's own record: span, split origin, every classified attribute. */
+  dxex: DxexDiagnosis;
   params: DxParameters | null;
   code: string | null;
   description: string | null;
@@ -49,12 +52,12 @@ export interface IcdStep {
  * The engine's state: the diagnosis, its own phrases by section, and the documented parameters. A
  * historical diagnosis gets two units (history.ts): as written, and as personal history.
  */
-function toUnit(i: number, dx: Diagnosis, params: DxParameters | null, asHistory = false): JevUnit {
+function toUnit(i: number, dx: Diagnosis & { dxex: DxexDiagnosis }, params: DxParameters | null, asHistory = false): JevUnit {
   const history = dx.status === "historical";
   const phrase = asHistory ? asHistoryPhrase(dx.phrase) : dx.phrase;
   const statements = statementsOf(dx, params);
   if (history) statements["status"] = redactText(HISTORY_NOTE);
-  return { uid: asHistory ? historyUid(`dx${i}`) : `dx${i}`, phrase: redactText(phrase), state: { diagnosis: { phrase: redactText(phrase), is_active: !history }, statements } };
+  return { uid: asHistory ? historyUid(`dx${i}`) : `dx${i}`, phrase: redactText(phrase), state: { diagnosis: { phrase: redactText(phrase), is_active: !history && !asHistory }, statements } };
 }
 
 /** The report's own words about the diagnosis by section, plus its coding details; redacted like every model call. */
@@ -71,16 +74,16 @@ function statementsOf(dx: Diagnosis, params: DxParameters | null): Record<string
 }
 
 /**
- * Report → diagnoses with the exact phrases that state them → coding parameters per diagnosis →
- * ICD-10-CM code per diagnosis from the Jev engine. Current and historical diagnoses are coded (history
- * in its personal-history or old/sequela form); statuses left out of `include_statuses` (ruled out and
- * uncertain by default) are returned without a code so the provider still sees them.
+ * Report → diagnoses (DXEX, the Codio engine's two steps: phrases, then their attributes and bucket) →
+ * the engine's diagnosis filter (icd_pipeline.diagnosis_filters) → ICD-10-CM code per kept diagnosis
+ * from the Jev engine only, its attributes as the coding details. Filtered-out diagnoses are returned
+ * without a code and with the reason, so the provider still sees them.
  */
 export async function predictIcd(
   raw: Block[],
   onStep: (s: IcdStep) => void = () => undefined,
   cleanedRaw?: Block[],
-): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
+): Promise<{ diagnoses: CodedDiagnosis[]; dxex: Pick<DxexResult, "removed">; usage: Usage[]; engineError?: string }> {
   const cfg = getConfig().icd_pipeline;
   const blocks = redactBlocks(raw);
   // The CDI-cleaned report, when the report run made one: read for meaning, never quoted.
@@ -88,45 +91,31 @@ export async function predictIcd(
   const usage: Usage[] = [];
 
   onStep({ step: "extract", label: "Finding the diagnoses in the report" });
-  const { diagnoses, usage: u1 } = await extractDiagnoses(blocks, cleaned);
-  usage.push(u1);
-  const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
+  const { result: dxex, usage: u1 } = await extractDxex(blocks, cleaned);
+  usage.push(...u1);
+  const diagnoses = dxex.diagnoses.map(toDiagnosis);
+  const filtered = dxex.diagnoses.map((d) => filterReason(d, cfg.diagnosis_filters));
+  const coded = filtered.map((reason) => reason === null);
   const toCode = coded.filter(Boolean).length;
   const items: IcdItem[] = diagnoses.map((d, i) =>
-    coded[i] ? { phrase: d.phrase, state: "reading" } : { phrase: d.phrase, state: "skipped", note: d.status },
+    coded[i] ? { phrase: d.phrase, state: "read" } : { phrase: d.phrase, state: "skipped", note: filtered[i] ?? d.status },
   );
   // A copy per step: the job keeps the last step it was given, and the items keep changing after it.
   const snapshot = () => items.map((x) => ({ ...x }));
 
-  const paramsErrors: (string | undefined)[] = [];
-  let read = 0;
-  const paramsLabel = `Found ${diagnoses.length} ${diagnoses.length === 1 ? "diagnosis" : "diagnoses"}, reading coding details`;
-  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode, items: snapshot() });
-  const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
-    if (!coded[i]) return null;
-    try {
-      const r = await predictParameters(dx, cleaned);
-      usage.push(r.usage);
-      return r.params;
-    } catch (err) {
-      // Coding goes on without the details, but the reason is kept for the review note.
-      paramsErrors[i] = `Coding details could not be read: ${err instanceof Error ? err.message : String(err)}`;
-      return null;
-    } finally {
-      (items[i] as IcdItem).state = "read";
-      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode, items: snapshot() });
-    }
-  });
+  // The engine has no separate details step: the classified attributes are the coding details.
+  const params = dxex.diagnoses.map((d, i) => (coded[i] ? detailsOf(d) : null));
 
   const codesLabel = "Choosing the ICD-10 codes";
   let landed = 0;
   for (const x of items) if (x.state !== "skipped") x.state = "coding";
   onStep({ step: "codes", label: codesLabel, done: 0, total: toCode, items: snapshot() });
 
-  // History first, straight from the tabular's history-form codes; what it cannot place goes to the engine.
+  // Jev only by default: history_direct_pick sends historical diagnoses to a Decisions pick from the
+  // tabular's history-form codes first (history.ts), with the engine for whatever it cannot place.
   const direct = new Map<number, JevResult>();
   await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
-    if (!coded[i] || dx.status !== "historical") return;
+    if (!cfg.history_direct_pick || !coded[i] || dx.status !== "historical") return;
     const r = await codeHistory(`dx${i}`, dx, statementsOf(dx, params[i] ?? null)).catch(() => null);
     if (!r) return;
     direct.set(i, r);
@@ -166,7 +155,7 @@ export async function predictIcd(
   return {
     diagnoses: diagnoses.map((dx, i) => {
       const r = resultFor(i, byUid);
-      const reason = !coded[i] ? `Not coded: ${dx.status.replace("_", " ")}` : engineError ?? r?.error ?? r?.handoff?.reason ?? paramsErrors[i] ?? null;
+      const reason = !coded[i] ? filtered[i] ?? null : engineError ?? r?.error ?? r?.handoff?.reason ?? null;
       return {
         ...dx,
         params: params[i] ?? null,
@@ -178,6 +167,7 @@ export async function predictIcd(
         trail: r?.trail ?? null,
       };
     }),
+    dxex: { removed: dxex.removed },
     usage,
     engineError,
   };

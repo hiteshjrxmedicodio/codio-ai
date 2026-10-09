@@ -12,3 +12,7 @@ extension/.wxt/
 service/engine/**/inputs/gastro/
 service/engine/**/results/
 service/engine/**/extraction_errors.json
+
+# Python bytecode caches (bridge and ICD engine)
+__pycache__/
+*.py[cod]

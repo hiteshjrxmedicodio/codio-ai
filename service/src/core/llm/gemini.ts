@@ -4,6 +4,7 @@ import { loadPrompt } from "../prompts";
 import type { Usage } from "../types";
 import { redactText } from "../privacy/redact";
 import { stopSignal, throwIfStopped } from "../stop";
+import { callClaude } from "./claude";
 
 /** One user-message part: text, or an image as base64 JPEG/PNG. */
 export type InputPart = { text: string } | { image: string; mimeType?: string };
@@ -54,6 +55,7 @@ export function toParts(parts: InputPart[]): Part[] {
 export async function callBlock<T>(call: BlockCall): Promise<BlockReply<T>> {
   const block = getBlockConfig(call.blockId);
   if (!block.enabled) throw new Error(`Block ${call.blockId} is disabled in config.yaml`);
+  if (block.provider === "anthropic") return callClaude<T>(call, block);
   const { timeout_ms, parse_retries } = getConfig().llm;
   const started = Date.now();
   let lastError: unknown;

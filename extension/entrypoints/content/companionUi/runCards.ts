@@ -225,7 +225,7 @@ function journey(v: CptView, p: CptProcedure): string {
   steps.push(`<li><span class="what">Compared ${p.candidates.length} candidate codes</span>${top.join("")}</li>`);
   const s = p.selection;
   if (!s) return `<ol class="trail">${steps.join("")}${li("No code chosen", "", "stop")}</ol>`;
-  const by = s.source === "decisions" ? "Decisions API" : "Gemini";
+  const by = s.source === "decisions" ? "Decisions API" : s.source;
   steps.push(li(`Chose <b>${esc(s.code)}</b> ${pct(s.confidence)}`, `${esc(s.rationale || "No reason given")} · ${by}`));
   const mod = modifierOf(v, p);
   const end =

@@ -11,6 +11,8 @@ const Setting = z.enum(["operative", "enm", "inpatient", "unknown", "none"]);
 
 const BlockConfig = z.object({
   prompt: z.string(),
+  /** gemini (default) or anthropic; on anthropic, thinking is Claude's effort and temperature is not sent. */
+  provider: z.enum(["gemini", "anthropic"]).default("gemini"),
   model: z.string(),
   thinking: Thinking,
   temperature: z.number(),
@@ -28,6 +30,7 @@ const ConfigSchema = z.object({
     decisions_model: z.string(),
     transcribe_model: z.string(),
   }),
+  anthropic: z.object({ api_key_env: z.string(), timeout_ms: z.number().int().positive(), refusal_fallback: z.boolean() }),
   blocks: z.record(z.string(), BlockConfig),
   decision_blocks: z.record(z.string(), z.object({ prompt: z.string() })),
   decisions: z.object({
@@ -93,8 +96,10 @@ const ConfigSchema = z.object({
     clinical_hints: z.array(z.string()).min(1),
   }),
   icd_pipeline: z.object({
-    provider: z.enum(["decisions", "jev"]),
+    provider: z.enum(["decisions", "jev", "claude"]),
     decisions_model: z.string(),
+    claude_model: z.string(),
+    claude_effort: z.enum(["low", "medium", "high"]),
     jev_path: z.string(),
     python: z.string(),
     workers: z.number().int().positive(),
@@ -102,14 +107,21 @@ const ConfigSchema = z.object({
     gemini_fallback: z.boolean(),
     gemini_model: z.string(),
     timeout_ms: z.number().int().positive(),
-    include_statuses: z.array(z.enum(["current", "historical", "uncertain", "ruled_out"])).min(1),
+    /** The Codio engine's DXEX filter: kept when it matches any include group, dropped when it matches any exclude group. */
+    diagnosis_filters: z.object({
+      include: z.array(z.record(z.string(), z.union([z.boolean(), z.string()]))),
+      exclude: z.array(z.record(z.string(), z.union([z.boolean(), z.string()]))),
+    }),
+    /** The client's coding constraints, given to P-DXEX-EXTRACT with each report. */
+    client_constraints: z.object({ never_extract: z.array(z.string()), distinct: z.array(z.array(z.string()).min(2)) }),
+    history_direct_pick: z.boolean(),
     history_candidates: z.number().int().positive(),
     param_concurrency: z.number().int().positive(),
   }),
   history_sections: z.object({ enabled: z.boolean(), headings: z.array(z.string()).min(1) }),
   report_run: z.object({ icd: z.boolean(), cpt: z.boolean() }),
   cpt_pipeline: z.object({
-    select_provider: z.enum(["openai_decisions", "gemini"]),
+    select_provider: z.enum(["openai_decisions", "block"]),
     attempted_modifier: z.string(),
     gate_threshold: z.number().min(0).max(1),
     report_max_chars: z.number().int().positive(),

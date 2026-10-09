@@ -7,17 +7,18 @@ import { CARD_BODY_STYLE } from "./style";
  */
 export const DOCK_STYLE = `
   :host { all: initial; position: fixed; top: 12px; right: 16px; z-index: 2147483646; }
-  :host(.folded) { right: 0; }
+  :host(.folded) { right: 0; top: var(--strip-top, 12px); }
   :host(.folded) .stack { display: none; }
   .strip { display: none; flex-direction: column; align-items: center; gap: 9px; box-sizing: border-box; width: 30px; padding: 11px 0 10px;
-    margin: 0; border: 0; border-radius: 12px 0 0 12px; background: #03045a; color: #fff; cursor: pointer;
+    margin: 0; border: 0; border-radius: 12px 0 0 12px; background: #03045a; color: #fff; cursor: grab; touch-action: none; user-select: none;
     box-shadow: 0 6px 18px rgba(3, 4, 90, .28); font: 600 11px/1 system-ui, -apple-system, sans-serif; transition: background-color .15s, transform .25s cubic-bezier(.2,.8,.2,1); }
   :host(.folded) .strip { display: flex; }
+  .strip.dragging { cursor: grabbing; transition: background-color .15s; }
   .strip:hover { background: #00309f; transform: translateX(-2px); }
   .strip:focus-visible { outline: 2px solid #5b8cff; outline-offset: 2px; }
   .strip .vt { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .06em; white-space: nowrap; }
   .strip .n[hidden] { display: none; }
-  .strip .n { min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #fff; color: #03045a; font-size: 10px; line-height: 16px; text-align: center; }
+  .strip .n { min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #fffdf8; color: #03045a; font-size: 10px; line-height: 16px; text-align: center; }
   .strip.updated .dot { animation: ping 1.4s ease-out; }
   /* The stack scrolls, so it clips: the padding is room for each card's rounded shadow, which would
      otherwise be cut off square at the bottom corners. The padding is click-through; only cards catch the pointer. */
@@ -25,7 +26,7 @@ export const DOCK_STYLE = `
     overflow-y: auto; display: flex; flex-direction: column; gap: 8px; pointer-events: none;
     font: 13px/1.45 system-ui, -apple-system, sans-serif; color: #24211c; scrollbar-width: thin; }
   .stack:empty { display: none; }
-  .card { flex: none; pointer-events: auto; background: #fffdf8; border: 1px solid #e6ddcc; border-radius: 14px; overflow: hidden;
+  .card { flex: none; pointer-events: auto; background: #faf6ee; border: 1px solid #e6ddcc; border-radius: 14px; overflow: hidden;
     box-shadow: 0 10px 28px rgba(3, 4, 90, .16); transition: opacity .22s ease, transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .2s; }
   .card.entering { opacity: 0; transform: translateX(24px); }
   .card > .head { cursor: pointer; user-select: none; }

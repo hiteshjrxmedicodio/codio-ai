@@ -5,8 +5,9 @@
  */
 import { removeCard, type CardId } from "./companionUi/dock";
 import { icdProgressCard, type CodedDiagnosis } from "./companionUi/icdCards";
-import { cdiDetailCard, cdiListCard, cdiLoading, cptDetailCard, cptListCard, cptLoading, type CdiView, type CptView } from "./companionUi/runCards";
+import { cdiDetailCard, cdiGroups, criticality, type Level, cdiListCard, cdiLoading, cptDetailCard, cptListCard, cptLoading, type CdiView, type CptView } from "./companionUi/runCards";
 import { runIcdJob } from "./icdJob";
+import { annotate } from "./annotate";
 
 export interface RunView {
   cdi: CdiView;
@@ -18,8 +19,8 @@ type CdiReply = {
   blocks: { heading: string; text: string }[];
   confidence: number;
   changed: number[];
-  changes?: { index: number; kind: string; before: string; after: string; reason: string }[];
-  flags?: { index: number; text: string; reason: string }[];
+  changes?: { index: number; kind: string; before: string; after: string; reason: string; affects_coding?: boolean; coding_effect?: string }[];
+  flags?: { index: number; text: string; reason: string; affects_coding?: boolean; coding_effect?: string }[];
   error?: string;
 };
 type CptReply = Partial<CptView> & { error?: string; skipped?: string };
@@ -74,7 +75,7 @@ type Show = (html: string, where: CardId, focus?: boolean) => void;
  * the CDI card; once CDI is done its card fills and ICD-10 and CPT start, each card filling the
  * moment its part finishes. Returns the whole reply.
  */
-export function runReport(page: Page, show: Show): Promise<Reply> {
+export function runReport(page: Page, show: Show, signal?: AbortSignal): Promise<Reply> {
   openCdi = openProc = null;
   show(cdiLoading(), "cdi");
   let shown = "";
@@ -96,17 +97,40 @@ export function runReport(page: Page, show: Show): Promise<Reply> {
         else show(cptListCard(cptView(p.cpt)), "cpt", false);
       }
     },
+    signal,
   );
 }
 
-/** Which section and which procedure are open; null shows the list. */
+/**
+ * CDI's items for the chart: the words as the page has them (a change's text before CDI, or the text it
+ * left as written), each with its colour and the group (0 changes the codes, 1 general) it opens.
+ */
+export function cdiMarks(run: RunView): { quote: string; level: Level; group: number }[] {
+  return run.cdi.sections.flatMap((s) => [
+    ...s.changes.filter((c) => c.before.trim()).map((c) => ({ quote: c.before, level: criticality(c), group: criticality(c) === "high" ? 0 : 1 })),
+    ...s.flags.map((f) => ({ quote: f.text, level: criticality(f, true), group: criticality(f, true) === "high" ? 0 : 1 })),
+  ]);
+}
+
+/** CDI's items on the chart in their colours; clicking one opens its group in the CDI card. */
+export function annotateCdi(run: RunView | undefined, openGroup: (group: number) => void): void {
+  const marks = run ? cdiMarks(run) : [];
+  annotate(marks.map((m) => [m.quote]), (i) => openGroup(marks[i]?.group ?? 1), marks.map((m) => m.level));
+}
+
+/** The CPT card's procedures on the chart, by the words they were extracted from; clicking one opens its journey. */
+export function annotateCpt(run: RunView | undefined, openProcedure: (index: number) => void): void {
+  annotate((run?.cpt.procedures ?? []).map((p) => [p.procedure_text]), openProcedure);
+}
+
+/** Which CDI group (0 changes the codes, 1 general) and which procedure are open; null shows the list. */
 let openCdi: number | null = null;
 let openProc: number | null = null;
 
 /** Both cards from a finished run (a new one, or one brought back after a refresh). */
 export function renderRun(show: Show, run: RunView, focus = false): void {
-  const section = openCdi === null ? undefined : run.cdi.sections[openCdi];
-  show(section ? cdiDetailCard(section) : cdiListCard(run.cdi), "cdi", focus && openCdi !== null);
+  const group = openCdi === null ? undefined : cdiGroups(run.cdi)[openCdi];
+  show(group?.sections.length ? cdiDetailCard(group) : cdiListCard(run.cdi), "cdi", focus && openCdi !== null);
   if (run.cpt.off) removeCard("cpt");
   else show(openProc === null ? cptListCard(run.cpt) : cptDetailCard(run.cpt, openProc), "cpt", focus && openProc !== null);
 }
@@ -116,8 +140,8 @@ export function runAction(action: string | undefined, index: number, run: RunVie
   if (!run || !action || !["cdi", "cdi-back", "proc", "cpt-back"].includes(action)) return false;
   if (action === "cdi" || action === "cdi-back") {
     openCdi = action === "cdi" ? index : null;
-    const section = openCdi === null ? undefined : run.cdi.sections[openCdi];
-    show(section ? cdiDetailCard(section) : cdiListCard(run.cdi), "cdi", true);
+    const group = openCdi === null ? undefined : cdiGroups(run.cdi)[openCdi];
+    show(group?.sections.length ? cdiDetailCard(group) : cdiListCard(run.cdi), "cdi", true);
   } else {
     openProc = action === "proc" ? index : null;
     show(openProc === null ? cptListCard(run.cpt) : cptDetailCard(run.cpt, openProc), "cpt", true);

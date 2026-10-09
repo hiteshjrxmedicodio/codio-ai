@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SERVICE_ROOT, getConfig } from "../../core/config";
+import { StoppedError, stopSignal } from "../../core/stop";
 
 export interface JevUnit {
   uid: string;
@@ -44,6 +45,7 @@ export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string
   if (!existsSync(join(cfg.jev_path, "run_icd_walk.py"))) {
     return Promise.reject(new Error(`ICD engine not found at ${cfg.jev_path}. Set icd_pipeline.jev_path in service/config/config.yaml`));
   }
+  if (stopSignal()?.aborted) return Promise.reject(new StoppedError());
   return new Promise((resolve, reject) => {
     const child = spawn(cfg.python, [join(SERVICE_ROOT, "bridge", "jev_bridge.py"), "--jev", cfg.jev_path], {
       env: process.env,
@@ -51,6 +53,14 @@ export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string
     });
     let out = "";
     let err = "";
+    // Stop: the engine process is killed at once, whatever diagnosis it is on.
+    const stop = stopSignal();
+    const onStop = () => {
+      clearTimeout(timer);
+      child.kill("SIGKILL");
+      reject(new StoppedError());
+    };
+    stop?.addEventListener("abort", onStop, { once: true });
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("The ICD engine took too long"));
@@ -79,6 +89,7 @@ export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string
     });
     child.on("close", () => {
       clearTimeout(timer);
+      stop?.removeEventListener("abort", onStop);
       try {
         const parsed = JSON.parse(out.trim().split("\n").pop() ?? "{}") as { results?: JevResult[]; error?: string };
         if (parsed.error) reject(new Error(parsed.error));

@@ -7,9 +7,15 @@ const HIGHLIGHT = "codio-suggestion";
 const ACTIVE = "codio-suggestion-active";
 const STYLE_ID = "codio-highlight-style";
 
+/** CDI's changes are coloured by how much they matter: red changes the codes, amber needs a check, blue is a writing correction. */
+export type Level = "high" | "medium" | "low";
+const LEVELS: Level[] = ["high", "medium", "low"];
+const levelName = (l: Level) => `codio-cdi-${l}`;
+
 interface Mark {
   index: number;
   range: Range;
+  level?: Level;
 }
 
 let onPick: ((index: number) => void) | null = null;
@@ -87,12 +93,18 @@ function ensureStyle(): void {
   style.id = STYLE_ID;
   style.textContent = `
     ::highlight(${HIGHLIGHT}) { background-color: rgba(251, 191, 36, .42); text-decoration: underline 2px #c2410c; text-underline-offset: 3px; }
-    ::highlight(${ACTIVE}) { background-color: rgba(245, 158, 11, .62); text-decoration: underline 2.5px #9a3412; text-underline-offset: 3px; }`;
+    ::highlight(${ACTIVE}) { background-color: rgba(245, 158, 11, .62); text-decoration: underline 2.5px #9a3412; text-underline-offset: 3px; }
+    ::highlight(${levelName("high")}) { background-color: rgba(239, 68, 68, .30); text-decoration: underline 2px #b91c1c; text-underline-offset: 3px; }
+    ::highlight(${levelName("medium")}) { background-color: rgba(251, 191, 36, .42); text-decoration: underline 2px #c2410c; text-underline-offset: 3px; }
+    ::highlight(${levelName("low")}) { background-color: rgba(59, 130, 246, .18); text-decoration: underline 1.5px dotted #1d4ed8; text-underline-offset: 3px; }`;
   if (!style.isConnected) (document.head ?? document.documentElement).appendChild(style);
 }
 
-/** Highlight each item's quotes; returns how many items could be placed on the page. */
-export function annotate(quotesPerSuggestion: string[][], pick: (index: number) => void): number {
+/**
+ * Highlight each item's quotes; returns how many items could be placed on the page. With `levels`
+ * (CDI's changes), each item is coloured by its level instead of the one amber.
+ */
+export function annotate(quotesPerSuggestion: string[][], pick: (index: number) => void, levels?: Level[]): number {
   clearAnnotations();
   if (!("highlights" in CSS)) return 0;
   onPick = pick;
@@ -101,10 +113,17 @@ export function annotate(quotesPerSuggestion: string[][], pick: (index: number) 
   quotesPerSuggestion.forEach((quotes, index) => {
     for (const q of quotes) {
       const range = findRange(q, idx);
-      if (range) hits.push({ index, range });
+      if (range) hits.push({ index, range, level: levels?.[index] });
     }
   });
-  CSS.highlights.set(HIGHLIGHT, new Highlight(...hits.map((m) => m.range)));
+  if (!levels) CSS.highlights.set(HIGHLIGHT, new Highlight(...hits.map((m) => m.range)));
+  // Where two levels overlap, the more critical colour shows.
+  else
+    LEVELS.forEach((l, i) => {
+      const h = new Highlight(...hits.filter((m) => m.level === l).map((m) => m.range));
+      h.priority = LEVELS.length - i;
+      CSS.highlights.set(levelName(l), h);
+    });
   document.addEventListener("click", onPageClick, true);
   return new Set(hits.map((m) => m.index)).size;
 }
@@ -117,7 +136,9 @@ export function focusSuggestion(index: number | number[], smooth = true): void {
   const order = Array.isArray(index) ? index : [index];
   const mine = order.flatMap((i) => hits.filter((x) => x.index === i));
   if (!mine.length) return;
-  CSS.highlights.set(ACTIVE, new Highlight(...mine.map((m) => m.range)));
+  const active = new Highlight(...mine.map((m) => m.range));
+  active.priority = 10; // Above every CDI colour, so the words being looked at always stand out.
+  CSS.highlights.set(ACTIVE, active);
   (mine[0]?.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "instant" });
 }
 
@@ -132,5 +153,6 @@ export function clearAnnotations(): void {
   if ("highlights" in CSS) {
     CSS.highlights.delete(HIGHLIGHT);
     CSS.highlights.delete(ACTIVE);
+    for (const l of LEVELS) CSS.highlights.delete(levelName(l));
   }
 }

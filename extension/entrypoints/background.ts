@@ -106,6 +106,10 @@ export default defineBackground(() => {
         return post("/v1/codes/jobs", { blocks: message.blocks });
       case "codes:status":
         return get(`/v1/codes/jobs/${encodeURIComponent(String(message.id))}`);
+      case "icd:stop":
+      case "codes:stop":
+        // The provider pressed Stop: the service ends the job, its model calls and its engine process.
+        return post(`/v1/${message.type === "icd:stop" ? "icd" : "codes"}/jobs/${encodeURIComponent(String(message.id))}/stop`, {});
       case "codes:run":
         return post("/v1/codes/run", { blocks: message.blocks });
       case "cpt:predict":

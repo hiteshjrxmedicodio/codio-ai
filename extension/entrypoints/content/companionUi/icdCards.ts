@@ -2,7 +2,7 @@
  * Cards for the ICD pipeline: each phrase the report states a diagnosis in, with its ICD-10-CM
  * code beside it, and one diagnosis opened up with the trail the engine took to its code.
  */
-import { esc, head } from "./cards";
+import { STOP_BUTTON, esc, head } from "./cards";
 
 type TrailStep =
   | { kind: "choice"; level: string; parent: string | null; parent_desc: string | null; chose: string | null; chose_desc: string | null; confidence: number | null; undecided: boolean }
@@ -91,7 +91,8 @@ export function icdProgressCard(s: IcdStep): string {
     ? items.map((x, i) => `<div class="lr ${x.state}"><span class="ind"></span><span class="ph" title="${esc(x.phrase)}">${esc(x.phrase)}</span>${slot(x, i)}</div>`).join("")
     : `<div class="lr ghost"><span class="ind"></span><span class="sk wide"></span></div>`.repeat(3);
   return `${head("ICD-10 codes")}<div class="body"><div class="prog"><div class="bar">${bar}</div>
-    <div class="pt">${esc(title)}</div><div class="ps">${esc(sub)}</div></div><div class="live">${rows}</div></div>`;
+    <div class="pt">${esc(title)}</div><div class="ps">${esc(sub)}</div></div><div class="live">${rows}</div>
+    <div class="actions" style="margin-top:8px;display:flex;justify-content:flex-end">${STOP_BUTTON}</div></div>`;
 }
 
 const STATUS: Record<string, string> = { historical: "History only", uncertain: "Uncertain", ruled_out: "Ruled out" };

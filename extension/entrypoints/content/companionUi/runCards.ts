@@ -5,12 +5,20 @@
  */
 import { esc, head, loadingCard, messageCard } from "./cards";
 
-export interface CdiChange {
+/** Whether a change or an item left as written can change the predicted codes, and the readings it decides between. */
+export interface CodingImpact {
+  affects_coding?: boolean;
+  coding_effect?: string;
+}
+
+export interface CdiChange extends CodingImpact {
   kind: string;
   before: string;
   after: string;
   reason: string;
 }
+
+export type CdiFlag = CodingImpact & { text: string; reason: string };
 
 export interface CdiSection {
   heading: string;
@@ -18,7 +26,7 @@ export interface CdiSection {
   cleaned: string;
   /** CDI's trail for this section: each change it made, and what it was unsure of and left as written. */
   changes: CdiChange[];
-  flags: { text: string; reason: string }[];
+  flags: CdiFlag[];
 }
 
 export interface CdiView {
@@ -56,21 +64,78 @@ const section = (title: string, body: string) => `<section class="sec"><div clas
 const li = (what: string, sub = "", cls = "") => `<li${cls ? ` class="${cls}"` : ""}><span class="what">${what}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</li>`;
 
 // ── CDI ────────────────────────────────────────────────────────────────────
-export const cdiLoading = () => loadingCard("CDI", "Cleaning the report…");
+export const cdiLoading = () => loadingCard("CDI", "Cleaning the report…", true);
+
+const usable = (h: string) => /[a-z0-9]/i.test(h);
+/** The label a section's text opens with ("Assessment: ..."), for a section without a heading. */
+const opening = (s: CdiSection) => s.original.trim().split("\n")[0]?.match(/^([^:]{2,60}):/)?.[1]?.trim() ?? "";
+/** The section's first words, for a section with neither a heading nor an opening label. */
+function firstWords(s: CdiSection): string {
+  const words = s.original.replace(/\s+/g, " ").trim().split(" ").filter((w) => /[a-z0-9]/i.test(w));
+  return words.length ? `${words.slice(0, 5).join(" ").replace(/[.,;:]+$/, "")}${words.length > 5 ? "…" : ""}` : "Untitled section";
+}
+
+/** A name the provider recognises: the heading, else the label the text opens with, else its first words. */
+export const sectionName = (s: CdiSection) => (usable(s.heading) ? s.heading.trim() : opening(s) || firstWords(s));
+
+/** Kinds that change what a coder reads, for records saved before CDI judged each item itself. */
+const CODING_KINDS = new Set(["interpretation", "reference", "copy", "removal", "split"]);
+const affectsCoding = (x: CodingImpact & { kind?: string }) => x.affects_coding ?? (x.kind ? CODING_KINDS.has(x.kind) : false);
+
+/**
+ * How much one item matters, for its colour on the chart and in the card: high when it can change the
+ * codes, medium when it needs a check (left as written, or a connection CDI inferred), low when it is
+ * a writing correction (spelling, an abbreviation, a format).
+ */
+export type Level = "high" | "medium" | "low";
+export function criticality(x: CodingImpact & { kind?: string }, leftAsWritten = false): Level {
+  if (affectsCoding(x)) return "high";
+  return leftAsWritten || x.kind === "interpretation" ? "medium" : "low";
+}
+
+const LEGEND = `<div class="legend"><span><i class="lv-high"></i>Changes the codes</span><span><i class="lv-medium"></i>Needs a check</span><span><i class="lv-low"></i>Writing correction</span></div>`;
+
+export interface CdiGroup {
+  title: string;
+  /** Each section with only this group's changes and items left as written. */
+  sections: CdiSection[];
+}
+
+/**
+ * Always two groups: what can change the predicted codes first (CDI judges each change, and each item it
+ * left as written, and names the readings: MSSA as the cause of a cellulitis or as an infection of its
+ * own), then general issues, the writing corrections that leave the codes as they are.
+ */
+export function cdiGroups(v: CdiView): CdiGroup[] {
+  const part = (coding: boolean): CdiSection[] =>
+    v.sections
+      .map((s) => ({ ...s, changes: s.changes.filter((c) => affectsCoding(c) === coding), flags: s.flags.filter((f) => affectsCoding(f) === coding) }))
+      .filter((s) => s.changes.length || s.flags.length);
+  return [
+    { title: "Issues that change the codes", sections: part(true) },
+    { title: "General issues", sections: part(false) },
+  ];
+}
+
+const count = (list: CdiSection[]) => list.reduce((t, s) => t + s.changes.length + s.flags.length, 0);
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 export function cdiListCard(v: CdiView): string {
   if (v.error) return messageCard("CDI", `CDI couldn't run, so coding read the report as written. ${v.error}`);
   if (!v.sections.length) return `${head("CDI · nothing to clean")}<div class="body"><div class="muted">All ${v.total} sections were already clear; coding read them as written.</div></div>`;
-  const rows = v.sections
-    .map((s, i) => {
-      const n = s.changes.length;
-      const label = n ? `${n} change${n === 1 ? "" : "s"}` : "Checked";
-      return `<button class="dx" data-action="cdi" data-index="${i}" title="Show what CDI changed"><span class="ph">${esc(s.heading || "(no heading)")}</span><span class="chip${n ? "" : " none"}">${label}</span></button>`;
+  const rows = cdiGroups(v)
+    .map((g, i) => {
+      const n = count(g.sections);
+      const label = n ? plural(n, "item") : "None";
+      const sub = g.sections.length ? g.sections.map(sectionName).join(" · ") : i === 0 ? "Nothing CDI did changes the codes" : "No writing corrections";
+      return `<button class="dx" data-action="cdi" data-index="${i}" title="Show what CDI changed"${g.sections.length ? "" : " disabled"}>
+        <span class="ph"><span>${esc(g.title)}</span><small title="${esc(sub)}">${esc(sub)}</small></span>
+        <span class="chip${n ? (i === 0 ? " warn" : "") : " none"}">${label}</span></button>`;
     })
     .join("");
   const n = v.sections.reduce((t, s) => t + s.changes.length, 0);
-  return `${head(`CDI · ${n} change${n === 1 ? "" : "s"} in ${v.sections.length} of ${v.total} sections`)}<div class="body">${rows}
-    <div class="muted">Diagnoses and procedures were read from the cleaned text. Nothing on the page was changed.</div></div>`;
+  return `${head(`CDI · ${plural(n, "change")} in ${v.sections.length} of ${v.total} sections`)}<div class="body">${rows}
+    ${LEGEND}<div class="muted">Diagnoses and procedures were read from the cleaned text. Nothing on the page was changed; the coloured words on it are what CDI changed.</div></div>`;
 }
 
 const KIND: Record<string, string> = {
@@ -84,26 +149,42 @@ const KIND: Record<string, string> = {
   copy: "Copied into the assessment",
 };
 
+/** How the item can change the codes: the readings it decides between and the codes each gives. */
+const effect = (x: CodingImpact) => (x.coding_effect ? `<span class="impact" style="display:block;margin-top:4px;padding:5px 7px;border-radius:6px;background:#fdf1e4;color:#7c2d12;font-size:12px"><b>Coding:</b> ${esc(x.coding_effect)}</span>` : "");
+
 /** CDI's trail for one section: each change as before → after with its reason, in the order made. */
 function changeTrail(s: CdiSection): string {
   if (!s.changes.length) return `<div class="muted">No changes; the text was already clear.</div>`;
   const items = s.changes.map((c) =>
-    li(esc(KIND[c.kind] ?? c.kind), `${c.before ? `<s>${esc(c.before)}</s> → ` : ""}<b>${esc(c.after || "(removed)")}</b>${c.reason ? `<br>${esc(c.reason)}` : ""}`),
+    li(esc(KIND[c.kind] ?? c.kind), `${c.before ? `<s>${esc(c.before)}</s> → ` : ""}<b>${esc(c.after || "(removed)")}</b>${c.reason ? `<br>${esc(c.reason)}` : ""}${effect(c)}`, `lv-${criticality(c)}`),
   );
   return `<ol class="trail">${items.join("")}</ol>`;
 }
 
-export function cdiDetailCard(s: CdiSection): string {
+const SEC_HEAD = "display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:4px;border-bottom:1px solid #e6ddcc";
+
+/** One section inside a group: a header with its count, what CDI changed, what it left as written, and the whole text on request. */
+function sectionBlock(s: CdiSection): string {
+  const n = s.changes.length;
+  const chip = `<span class="chip">${plural(n + s.flags.length, "item")}</span>`;
+  const header = `<div style="${SEC_HEAD}"><b style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(sectionName(s))}">${esc(sectionName(s))}</b>${chip}</div>`;
+  if (!n && !s.flags.length) return header;
   const text = (t: string) => `<div class="muted" style="white-space:pre-wrap">${esc(t)}</div>`;
-  const left = s.flags.length ? section("Left as written", `<ol class="trail">${s.flags.map((f) => li(esc(f.text), esc(f.reason), "stop")).join("")}</ol>`) : "";
+  const left = s.flags.length ? section("Left as written", `<ol class="trail">${s.flags.map((f) => li(esc(f.text), `${esc(f.reason)}${effect(f)}`, `lv-${criticality(f, true)}`)).join("")}</ol>`) : "";
   const full = `<details class="all"><summary>Show the whole section, before and after</summary>${section("As written", text(s.original))}${section("After CDI", text(s.cleaned))}</details>`;
-  return `${head("CDI · Section")}<div class="body"><b style="font-size:13.5px">${esc(s.heading || "(no heading)")}</b>
-    <div class="flow">${section("What CDI changed", changeTrail(s))}${left}${full}</div>
-    <div class="actions"><button class="btn ghost" data-action="cdi-back">All sections</button></div></div>`;
+  return `${header}<div class="flow">${n ? changeTrail(s) : ""}${left}${full}</div>`;
+}
+
+/** One group (issues that change the codes, or general issues), section by section. */
+export function cdiDetailCard(g: CdiGroup): string {
+  const n = count(g.sections);
+  return `${head(`CDI · ${g.title}`)}<div class="body"><div class="muted">${plural(n, "item")} in ${plural(g.sections.length, "section")}</div>${LEGEND}
+    ${g.sections.map(sectionBlock).join("")}
+    <div class="actions"><button class="btn ghost" data-action="cdi-back">Both groups</button></div></div>`;
 }
 
 // ── CPT pipeline ───────────────────────────────────────────────────────────
-export const cptLoading = () => loadingCard("CPT pipeline", "Finding procedures and their codes…");
+export const cptLoading = () => loadingCard("CPT pipeline", "Finding procedures and their codes…", true);
 
 const OUTCOME: Record<NonNullable<CptProcedure["outcome"]>, string> = {
   coded: "",

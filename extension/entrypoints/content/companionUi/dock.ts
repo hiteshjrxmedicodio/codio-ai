@@ -43,7 +43,12 @@ export function overDock(x: number, y: number): boolean {
 }
 
 /** Open one card and fold the others; `null` folds the whole stack into the edge strip. */
+/** Told whenever a different card opens, so the chart can show that card's highlights. */
+let openListener: ((id: CardId) => void) | null = null;
+export const onCardOpen = (fn: (id: CardId) => void) => void (openListener = fn);
+
 function expand(id: CardId | null): void {
+  const changed = openId !== id;
   openId = id;
   if (id) lastOpen = id;
   for (const el of stack?.querySelectorAll<HTMLElement>(".card") ?? []) {
@@ -52,6 +57,7 @@ function expand(id: CardId | null): void {
     el.querySelector(".head")?.setAttribute("aria-expanded", String(open));
   }
   fold(id === null);
+  if (changed && id) openListener?.(id);
 }
 
 /** The strip stands in for the stack while folded; with several cards behind it, it says how many. */
@@ -73,6 +79,45 @@ function unfold(): void {
   expand(lastOpen && hasCard(lastOpen) ? lastOpen : (first ?? null));
 }
 
+const STRIP_KEY = "codio-strip-top";
+const DRAG_PX = 4;
+/** Set when the press on the strip became a drag, so letting go does not also unfold the cards. */
+let dragged = false;
+
+/** Keep the strip inside the window, whatever its height. */
+function placeStrip(top: number): number {
+  const max = innerHeight - (strip?.offsetHeight || 120) - 8;
+  const y = Math.round(Math.max(8, Math.min(top, max)));
+  host?.style.setProperty("--strip-top", `${y}px`);
+  return y;
+}
+
+/** The strip slides up and down the right edge; where it was left is kept for the next page. */
+function dragStrip(e: PointerEvent): void {
+  if (e.button !== 0 || !strip || !host) return;
+  const startY = e.clientY;
+  const startTop = host.getBoundingClientRect().top;
+  let y = startTop;
+  dragged = false;
+  strip.setPointerCapture(e.pointerId);
+  const move = (m: PointerEvent) => {
+    if (!dragged && Math.abs(m.clientY - startY) < DRAG_PX) return;
+    dragged = true;
+    strip?.classList.add("dragging");
+    y = placeStrip(startTop + m.clientY - startY);
+  };
+  const up = () => {
+    strip?.removeEventListener("pointermove", move);
+    strip?.removeEventListener("pointerup", up);
+    strip?.removeEventListener("pointercancel", up);
+    strip?.classList.remove("dragging");
+    if (dragged) void browser.storage.local.set({ [STRIP_KEY]: y }).catch(() => undefined);
+  };
+  strip.addEventListener("pointermove", move);
+  strip.addEventListener("pointerup", up);
+  strip.addEventListener("pointercancel", up);
+}
+
 function onClick(e: MouseEvent, onAction: (e: MouseEvent) => void): void {
   const target = e.target as HTMLElement;
   const el = target.closest<HTMLElement>(".card");
@@ -90,10 +135,15 @@ export function mountDock(onAction: (e: MouseEvent) => void): void {
   host = document.createElement(TAG);
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>${DOCK_STYLE}</style><div class="stack" role="complementary" aria-label="Codio AI"></div>
-    <button class="strip" type="button" title="Show the cards"><span class="dot"></span><span class="vt">Codio AI</span><span class="n"></span></button>`;
+    <button class="strip" type="button" title="Show the cards, or drag to move along the edge"><span class="dot"></span><span class="vt">Codio AI</span><span class="n"></span></button>`;
   stack = root.querySelector(".stack");
   strip = root.querySelector(".strip");
-  strip?.addEventListener("click", unfold);
+  strip?.addEventListener("pointerdown", dragStrip);
+  strip?.addEventListener("click", () => (dragged ? (dragged = false) : unfold()));
+  void browser.storage.local
+    .get(STRIP_KEY)
+    .then((r) => typeof r[STRIP_KEY] === "number" && placeStrip(r[STRIP_KEY] as number))
+    .catch(() => undefined);
   stack?.addEventListener("click", (e) => onClick(e, onAction));
   stack?.addEventListener("keydown", (e) => {
     const t = e.target as HTMLElement;

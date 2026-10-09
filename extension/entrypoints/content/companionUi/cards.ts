@@ -27,12 +27,36 @@ export const head = (title: string) =>
 
 export const IMPACT: Record<string, string> = { coding: "Affects coding", denial: "Could cause a denial", interpretation: "Could be misread" };
 
-export function loadingCard(title: string, text: string): string {
-  return `${head(title)}<div class="body"><div class="muted" style="display:flex;gap:8px;align-items:center"><span class="spin"></span>${esc(text)}</div></div>`;
+/** Stops the report run that is coding; shown on every card that is still working for it. */
+export const STOP_BUTTON = `<button class="btn ghost stop" data-action="stop-run" title="Stop coding this report">Stop</button>`;
+
+/** `stoppable` adds Stop, for the cards of a coding run. */
+export function loadingCard(title: string, text: string, stoppable = false): string {
+  return `${head(title)}<div class="body"><div class="muted" style="display:flex;gap:8px;align-items:center"><span class="spin"></span><span style="flex:1">${esc(text)}</span>${stoppable ? STOP_BUTTON : ""}</div></div>`;
+}
+
+/** The run was stopped: nothing was saved, and the report can be coded again from here. */
+export function stoppedCard(): string {
+  return `${head("Medical coding")}<div class="body"><div class="muted">Coding stopped. Nothing was saved for this report.</div>
+    <div class="actions" style="margin-top:8px"><button class="btn primary" data-action="allow">Code it again</button></div></div>`;
 }
 
 export function messageCard(title: string, text: string): string {
   return `${head(title)}<div class="body"><div class="muted">${esc(text)}</div></div>`;
+}
+
+const MIC = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
+
+/** A highlight with nothing to code: the provider is asked to put a question about it by voice. */
+export function askCard(text: string, mac: boolean): string {
+  const quote = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  const keys = mac ? "⌘ Command + ⌥ Option" : "Ctrl + Alt";
+  return `${head("Codio AI · Ask about this")}<div class="body">
+    <div class="muted">No diagnosis or procedure to code in <q>${esc(quote)}</q>. Ask me a question about it instead.</div>
+    <div class="actions" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <button class="btn primary" data-action="voice-ask" style="display:inline-flex;align-items:center;gap:6px">${MIC}Ask by voice</button>
+      <span class="muted" style="font-size:11px">or hold ${esc(keys)} and speak</span>
+    </div></div>`;
 }
 
 function codeRows(label: string, codes: Code[]): string {

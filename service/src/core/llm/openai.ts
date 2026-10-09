@@ -1,5 +1,6 @@
 import { getConfig } from "../config";
 import { redactText } from "../privacy/redact";
+import { stopSignal, throwIfStopped } from "../stop";
 
 function settings() {
   const cfg = getConfig().openai;
@@ -9,12 +10,14 @@ function settings() {
 }
 
 async function post(path: string, body: BodyInit, headers: Record<string, string> = {}): Promise<unknown> {
+  throwIfStopped();
   const s = settings();
+  const stop = stopSignal();
   const res = await fetch(`${s.base_url}${path}`, {
     method: "POST",
     headers: { authorization: `Bearer ${s.apiKey}`, ...headers },
     body,
-    signal: AbortSignal.timeout(s.timeout_ms),
+    signal: stop ? AbortSignal.any([AbortSignal.timeout(s.timeout_ms), stop]) : AbortSignal.timeout(s.timeout_ms),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

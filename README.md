@@ -97,8 +97,11 @@ panel (which owns the microphone permission), Whisper transcribes it, and the te
 answered from the open report in summary mode, or sent to the chat otherwise. Any other key during the hold cancels.
 
 **Codio AI companion (primary interface, no panel needed).** One element on every page that follows the
-pointer and changes shape in place: highlight text → code card (code and name only, placed beside the
-highlight and kept on screen); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
+pointer and changes shape in place: highlight text → code card (its ICD-10-CM or CPT codes, code and name only, placed beside the
+highlight and kept on screen), or, when the words document neither a diagnosis nor a procedure, an "Ask about
+this" card: **Ask by voice** listens until the next click or Enter (Escape cancels), or hold the push-to-talk
+keys, and the question is answered with the highlighted words attached (from them and their surrounding text
+when no report has been read, so no permission is needed; `selection.ts` `takeHighlight`, `pushToTalk.ts` `talkByClick`); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
 "Assessment:", never its running text, so a page written about coding is not mistaken for one; nothing sent) →
 permission card ("Medical coding · Code this report?", naming CDI, ICD-10 and CPT, in the first card) → on yes, the whole report
 is read and the report run (CDI, then ICD-10 and CPT; see Report run) goes through it (no summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
@@ -112,10 +115,12 @@ listed in the Review card. Clicking the words (or the row) opens a card right be
 the pill turning into it like the code card): the problem, the words, and **what to change** from
 `/v1/cdi/fix`, fetched the moment it opens; thumbs up (logged to `/v1/feedback`) and thumbs down (logged,
 dropped from the note, card closed). Words not found on the page open in the Review card instead.
-The chart shows one set of highlights at a time, the set of the card in use. Card stack
+The chart shows the highlights of the card that is open (`dock.onCardOpen`): CDI's changes in their
+criticality colours, the ICD-10 diagnosis phrases, the CPT procedures or the review's suggestions; clicking one opens it in that card. Card stack
 (`companionUi/dock.ts`): ICD-10, Review, CPT, Final codes, answers; every header always visible, one card open
 at a time with a capped height; folding the open card folds the whole stack into a slim strip on the right
-edge (card count on it once there are several, pinged by background updates) that brings the last open card back when clicked; the
+edge (card count on it once there are several, pinged by background updates) that brings the last open card back when clicked
+and can be dragged up and down the edge (its place is kept across pages in `storage.local`); the
 pill keeps following the pointer and only hides over the stack or the strip; CPT and
 final cards are filled by the `companion:prediction` message. Everything the companion does is saved where
 the panel saves (`utils/bg/reviewStore.ts` → History record under the chart's IDs: ICD codes, the check and
@@ -164,10 +169,16 @@ abbreviations, numbers, administrative noise and run-on diagnoses, never a chang
 original report on) → then side by side **diagnosis extraction → ICD-10-CM** and **procedure extraction → CPT**,
 both reading the cleaned report. Diagnosis quotes are still copied from the original so they highlight on the page.
 The companion shows the run as three cards, each filling the moment its own part finishes (the job reports
-`partial.cdi`, then `partial.icd` and `partial.cpt`). "Code this report?" and the page capture live in the first card, **CDI** (each section it cleaned, as written and
-after CDI), **ICD-10 codes** (each diagnosis and the engine's trail) and **CPT pipeline** (each procedure and its journey:
+`partial.cdi`, then `partial.icd` and `partial.cpt`). "Code this report?" and the page capture live in the first card, **CDI** (two groups, **Issues that change the codes** first, then **General issues**: CDI judges every
+change and every item it left as written for coding impact and names the readings and the codes each gives, such as
+MSSA read as the cause of a cellulitis, L03.x with B95.61, or as an infection of its own, A49.01; writing corrections
+are general; `runCards.ts` `cdiGroups`; each item is coloured by criticality, red changes the codes, amber needs a
+check, blue is a writing correction, in the card with a legend and on the chart; each group opens to its sections, each with a header and its count, changed ones first, as written and after CDI), **ICD-10 codes** (each diagnosis and the engine's trail) and **CPT pipeline** (each procedure and its journey:
 extracted → searched → candidates with match scores → chosen code, confidence and reason → final code, or why it
-was dropped). The documentation review (P-CON/AMB/INC/WRD) stays one click away. ICD coding runs the engine in `service/engine/jev_icd_engine`
+was dropped). Every card still working for the run (reading the report, CDI, ICD-10, CPT) has **Stop**: the run ends
+at once, nothing is saved, the service's `POST /jobs/:id/stop` aborts the job (no further model call and the ICD engine's
+Python process is killed, through the job's stop signal in `core/stop.ts`), and the CDI card offers **Code it again**.
+The documentation review (P-CON/AMB/INC/VAL) stays one click away. ICD coding runs the engine in `service/engine/jev_icd_engine`
 (`icd_pipeline.jev_path`, relative to `service/`): engine code and CMS FY2026 tabular, index and Excludes/see links
 only. The package's `inputs/gastro/` and `results/` hold production charts (PHI) and are never copied or committed
 (`.gitignore`). This engine version has no index retrieval or Gemini fallback; the bridge uses its

@@ -9,6 +9,8 @@ import type { CardId } from "./companionUi/dock";
 import type { CodedDiagnosis } from "./companionUi/icdCards";
 import { readRun, runReport, type RunView } from "./reportRun";
 
+export { StoppedError, isStopped } from "./icdJob";
+
 export interface CodedReport {
   title: string;
   blocks: { heading: string; text: string }[];
@@ -30,9 +32,13 @@ interface Running {
   /** The last card drawn in each slot, so a follower arriving late sees where the run is. */
   cards: Map<CardId, string>;
   listeners: Set<Drawn>;
+  /** Stop: ends the run here and in the service. */
+  stop: AbortController;
 }
 
 const running = new Map<string, Running>();
+/** Pages whose Stop was pressed while the report was still being read, before any job existed. */
+const stoppedReading = new Set<string>();
 const send = <T>(message: Record<string, unknown>) => browser.runtime.sendMessage(message) as Promise<T>;
 
 /** First save of a freshly coded report, made by the job itself so it lands even when the provider has moved on. */
@@ -46,13 +52,13 @@ async function save(key: string, r: CodedReport): Promise<CodedReport> {
 
 /** Start coding the report saved under `key`: the report run (CDI, then ICD-10 and CPT). */
 export function startCoding(key: string, input: Omit<CodedReport, "icd" | "run">): void {
-  const job = { cards: new Map(), listeners: new Set() } as Running;
+  const job = { cards: new Map(), listeners: new Set(), stop: new AbortController() } as Running;
   // Every card the run draws is kept and fanned out, so the page showing this report (if any) stays in step.
   const draw: Drawn = (html, where) => {
     job.cards.set(where, html);
     for (const fn of job.listeners) fn(html, where);
   };
-  job.done = runReport(input.blocks, draw)
+  job.done = runReport(input.blocks, draw, job.stop.signal)
     .then((r) => {
       const { icd, run } = readRun(r, input.blocks);
       return save(key, { ...input, icd, run });
@@ -64,6 +70,19 @@ export function startCoding(key: string, input: Omit<CodedReport, "icd" | "run">
 }
 
 export const isCoding = (key: string) => running.has(key);
+
+/**
+ * Stop coding the report under `key`. A running job ends at once (following it rejects with
+ * StoppedError) and nothing is saved; pressed while the report is still being read, the job never starts.
+ */
+export function stopCoding(key: string): void {
+  const job = running.get(key);
+  if (job) job.stop.abort();
+  else stoppedReading.add(key);
+}
+
+/** True, once, when Stop was pressed for `key` before its job started. */
+export const takeStopRequest = (key: string): boolean => stoppedReading.delete(key);
 
 /** Follow the job for `key`: the cards it has drawn so far straight away, every later one, then its result. */
 export function follow(key: string, onDraw: Drawn): Promise<CodedReport> | null {

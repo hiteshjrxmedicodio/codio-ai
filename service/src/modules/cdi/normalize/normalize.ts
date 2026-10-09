@@ -16,8 +16,19 @@ export function mergeCleaned(blocks: Block[], cleaned: { index: number; text: st
 /** `interpretation`: a pointing phrase ("as above") rewritten as the connection it makes; the provider did not write it in words. */
 export const CHANGE_KINDS = ["spelling", "abbreviation", "normalization", "interpretation", "reference", "removal", "split", "copy"] as const;
 
+/**
+ * Whether an item can change the codes predicted from the report, and how: an MSSA infection read as
+ * the cause of a cellulitis is coded with the cellulitis and an organism code (B95.61), read on its own
+ * as an infection (A49.01). The companion puts these first, apart from writing-only corrections.
+ */
+export interface CodingImpact {
+  affects_coding: boolean;
+  /** One plain sentence naming the readings and the codes each leads to; empty when it does not affect coding. */
+  coding_effect: string;
+}
+
 /** One edit CDI made, for its trail: where, what kind, the exact text before and after, and why. */
-export interface CdiChange {
+export interface CdiChange extends CodingImpact {
   index: number;
   kind: (typeof CHANGE_KINDS)[number];
   before: string;
@@ -26,7 +37,7 @@ export interface CdiChange {
 }
 
 /** Something CDI deliberately left as written (an unclear word, an ambiguous abbreviation, a reference it could not resolve). */
-export interface CdiFlag {
+export interface CdiFlag extends CodingImpact {
   index: number;
   text: string;
   reason: string;
@@ -34,6 +45,7 @@ export interface CdiFlag {
 
 const entry = (props: Record<string, unknown>) => ({ type: "object", properties: props, required: Object.keys(props) });
 const str = { type: "string" };
+const impact = { affects_coding: { type: "boolean" }, coding_effect: str };
 
 /**
  * The trail as it applies to the merged result: a change counts only when its block exists and was
@@ -64,8 +76,8 @@ export async function normalizeReport(
       type: "object",
       properties: {
         blocks: { type: "array", items: entry({ index: { type: "integer" }, text: str }) },
-        changes: { type: "array", items: entry({ index: { type: "integer" }, kind: { type: "string", enum: [...CHANGE_KINDS] }, before: str, after: str, reason: str }) },
-        left_as_written: { type: "array", items: entry({ index: { type: "integer" }, text: str, reason: str }) },
+        changes: { type: "array", items: entry({ index: { type: "integer" }, kind: { type: "string", enum: [...CHANGE_KINDS] }, before: str, after: str, reason: str, ...impact }) },
+        left_as_written: { type: "array", items: entry({ index: { type: "integer" }, text: str, reason: str, ...impact }) },
         confidence: { type: "number", minimum: 0, maximum: 1 },
       },
       required: ["blocks", "changes", "left_as_written", "confidence"],

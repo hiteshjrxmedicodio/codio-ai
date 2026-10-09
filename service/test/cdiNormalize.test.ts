@@ -23,12 +23,12 @@ describe("CDI merge-back", () => {
 describe("CDI trail", () => {
   const before = [{ heading: "A", text: "f/u 2 wks" }, { heading: "B", text: "HTN" }];
   const after = [{ heading: "A", text: "follow-up (f/u) 2 weeks (wks)" }, { heading: "B", text: "HTN" }];
-  const change = (over: Partial<CdiChange>): CdiChange => ({ index: 0, kind: "abbreviation", before: "f/u", after: "follow-up (f/u)", reason: "", ...over });
+  const change = (over: Partial<CdiChange>): CdiChange => ({ index: 0, kind: "abbreviation", before: "f/u", after: "follow-up (f/u)", reason: "", affects_coding: false, coding_effect: "", ...over });
 
   it("keeps only changes in blocks that were actually rewritten, and drops no-op changes", () => {
     const out = trailFor(before, after, [change({}), change({ index: 1, before: "HTN", after: "Hypertension (HTN)" }), change({ after: "f/u" , before: "f/u" }), change({ index: 9 })], [
-      { index: 1, text: "HTN", reason: "unclear" },
-      { index: 5, text: "x", reason: "out of range" },
+      { index: 1, text: "HTN", reason: "unclear", affects_coding: true, coding_effect: "" },
+      { index: 5, text: "x", reason: "out of range", affects_coding: false, coding_effect: "" },
     ]);
     expect(out.changes).toHaveLength(1);
     expect(out.flags.map((f) => f.index)).toEqual([1]);
@@ -41,9 +41,9 @@ describe("review quotes back in the page's wording", () => {
     { name: "Assessment", text: "Pt w/ HTN, stable." },
   ];
   const corrections: CdiChange[] = [
-    { index: 0, kind: "abbreviation", before: "LOC", after: "loss of consciousness (LOC)", reason: "" },
-    { index: 0, kind: "abbreviation", before: "72 y/o RHM", after: "72-year-old (y/o) right-handed male (RHM)", reason: "" },
-    { index: 1, kind: "abbreviation", before: "HTN", after: "hypertension (HTN)", reason: "" },
+    { index: 0, kind: "abbreviation", before: "LOC", after: "loss of consciousness (LOC)", reason: "", affects_coding: false, coding_effect: "" },
+    { index: 0, kind: "abbreviation", before: "72 y/o RHM", after: "72-year-old (y/o) right-handed male (RHM)", reason: "", affects_coding: false, coding_effect: "" },
+    { index: 1, kind: "abbreviation", before: "HTN", after: "hypertension (HTN)", reason: "", affects_coding: false, coding_effect: "" },
   ];
   const finding = (section: string, text: string) => ({ id: "f", block: "P-INC", kind: "unaddressed" as const, title: "t", quotes: [{ section, text }], detail: {}, confidence: 0.9 });
 

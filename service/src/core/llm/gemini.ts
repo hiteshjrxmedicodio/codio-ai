@@ -3,6 +3,7 @@ import { getBlockConfig, getConfig } from "../config";
 import { loadPrompt } from "../prompts";
 import type { Usage } from "../types";
 import { redactText } from "../privacy/redact";
+import { stopSignal, throwIfStopped } from "../stop";
 
 /** One user-message part: text, or an image as base64 JPEG/PNG. */
 export type InputPart = { text: string } | { image: string; mimeType?: string };
@@ -58,6 +59,7 @@ export async function callBlock<T>(call: BlockCall): Promise<BlockReply<T>> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= parse_retries; attempt++) {
+    throwIfStopped();
     const res = await getClient().models.generateContent({
       model: block.model,
       // Privacy: identifiers are scrubbed from every text part before it leaves this machine.
@@ -70,6 +72,7 @@ export async function callBlock<T>(call: BlockCall): Promise<BlockReply<T>> {
         maxOutputTokens: block.max_output_tokens,
         thinkingConfig: thinkingConfig(block.thinking),
         httpOptions: { timeout: timeout_ms },
+        abortSignal: stopSignal(),
       },
     });
     try {

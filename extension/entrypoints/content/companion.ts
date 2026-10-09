@@ -9,13 +9,15 @@ import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import { closeIssue, openIssue, refreshIssue } from "./issueCard";
 import * as card from "./companionUi/cards";
 import { icdDetailCard, icdListCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
-import { follow, isCoding, startCoding, type CodedReport } from "./reportJobs";
+import { StoppedError, follow, isCoding, isStopped, startCoding, stopCoding, takeStopRequest, type CodedReport } from "./reportJobs";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
-import { renderRun, runAction, type RunView } from "./reportRun";
+import { annotateCdi, annotateCpt, renderRun, runAction, type RunView } from "./reportRun";
 import { answerByVoice } from "./voiceQuestion";
+import { talkByClick } from "./pushToTalk";
+import type { Highlight } from "./selection";
 
 export { consent };
 
@@ -112,7 +114,9 @@ async function onPanelClick(e: MouseEvent): Promise<void> {
     } catch {
       btn.textContent = "Select it";
     }
-  } else if (action === "allow") void readReport();
+  } else if (action === "voice-ask") talkByClick();
+  else if (action === "stop-run") stopCoding(pageKey());
+  else if (action === "allow") void readReport();
   else if (action === "deny") {
     remember("declined");
     pendingQuestion = null;
@@ -138,16 +142,15 @@ export function offerPermission(): void {
   show(card.permissionCard(), "cdi");
 }
 
-/**
- * The chart shows one set of highlights at a time, for the card they belong to: the
- * diagnosis phrases, or the documentation suggestions while the provider is in that card.
- */
-let marked: "icd" | "review" | null = null;
-function mark(set: "icd" | "review"): void {
+/** The chart shows the highlights of the card that is open: diagnosis phrases, CDI's changes (coloured by criticality), procedures or suggestions. */
+let marked: "icd" | "cdi" | "cpt" | "review" | null = null;
+function mark(set: "icd" | "cdi" | "cpt" | "review"): void {
   const r = report;
   if (!r || marked === set) return;
   marked = set;
   if (set === "icd") annotate((r.icd?.diagnoses ?? []).map((d) => d.quotes.map((q) => q.text)), pickDiagnosis);
+  else if (set === "cdi") annotateCdi(r.run, (group) => runAction("cdi", group, r.run, show));
+  else if (set === "cpt") annotateCpt(r.run, (i) => runAction("proc", i, r.run, show));
   else annotate(r.suggestions.map((s, i) => (r.votes[i] === "down" ? [] : s.quotes.map((q) => q.text))), pickSuggestion);
 }
 
@@ -309,9 +312,11 @@ async function readReport(reuse = false): Promise<void> {
     if (!isCoding(key)) {
       const saved = reuse ? await send<Remembered | null>({ type: "report:recall", key }).catch(() => null) : null;
       const usable = saved?.report?.icd || saved?.report?.run ? saved : null;
-      show(card.loadingCard("Medical coding", usable ? "Bringing back your codes…" : "Reading the whole report…"), "cdi");
+      takeStopRequest(key); // A Stop left over from an earlier card never stops this new run.
+      show(card.loadingCard("Medical coding", usable ? "Bringing back your codes…" : "Reading the whole report…", !usable), "cdi");
       const page = await readWholeReport(MAX_SCROLL_STEPS);
       if (!here()) return;
+      if (takeStopRequest(key)) throw new StoppedError();
       const print = await fingerprint(page.blocks);
       if (usable?.fingerprint === print) return void ((fp = print), present(usable.report));
       if (usable) show(card.loadingCard("Medical coding", "The report changed since last time. Coding it again…"), "cdi");
@@ -332,7 +337,8 @@ async function readReport(reuse = false): Promise<void> {
     if (q) void askByVoice(q);
   } catch (err) {
     if (here()) {
-      show(card.messageCard("Medical coding", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "cdi");
+      if (isStopped(err)) show(card.stoppedCard(), "cdi");
+      else show(card.messageCard("Medical coding", `I couldn't code this report. ${String(err instanceof Error ? err.message : err)}`), "cdi");
       for (const id of ["icd", "cpt"] as const) dock.removeCard(id);
     }
   }
@@ -341,8 +347,8 @@ async function readReport(reuse = false): Promise<void> {
 const fromCoded = ({ fingerprint: _, ...r }: CodedReport): Report => ({ ...r, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
 
 // ── Voice questions (voiceQuestion.ts) ─────────────────────────────────────
-export const askByVoice = (question: string, looksClinical = false): Promise<void> =>
-  answerByVoice(question, looksClinical, { report: () => report, show, hold: (q) => (pendingQuestion = q), persist });
+export const askByVoice = (question: string, looksClinical = false, about?: Highlight | null): Promise<void> =>
+  answerByVoice(question, looksClinical, { report: () => report, show, hold: (q) => (pendingQuestion = q), persist }, about);
 
 // ── Pill modes and lifecycle ───────────────────────────────────────────────
 /** Push-to-talk and short notes. Listening always clears any card and highlight first. */
@@ -361,6 +367,7 @@ export function companionOn(): void {
   on = true;
   view.mount((e) => void onPanelClick(e));
   dock.mountDock((e) => void onPanelClick(e));
+  dock.onCardOpen((id) => id !== "answer" && id !== "final" && mark(id));
   document.addEventListener("mousemove", onMove, { passive: true });
   document.addEventListener("mouseout", onLeave);
   document.addEventListener("mousedown", onDown, true);

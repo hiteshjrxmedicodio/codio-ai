@@ -16,7 +16,7 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-FIX | `cdi/p_fix_guidance.txt` | Say where a problem is and what kind of change resolves it, compliantly | `modules/cdi/fix/fix.ts` |
 | P-READ-SCREEN | `reading/p_read_screen.txt` | Transcribe visible note text exactly, under on-screen headings | `modules/reading/screenRead.ts` |
 | P-SUMMARIZE | `report/p_summarize_report.txt` | List every field in a complete report and summarise what each says | `modules/report/summarize.ts` |
-| P-CDI-NORMALIZE | `coding/p_cdi_normalize.txt` | Preprocessing: correct spelling, grammar, abbreviations and formats without changing meaning, returning every change and every unsettled item (from the Codio engine's p001_2 and P060). Owns all writing errors; the review never reports one | `modules/cdi/normalize/normalize.ts` |
+| P-CDI-NORMALIZE | `coding/p_cdi_normalize.txt` | Preprocessing: correct spelling, grammar, abbreviations and formats without changing meaning, returning every change and every unsettled item (from the Codio engine's p001_2 and P060). Owns all writing errors; the review never reports one. Judges each change and each item left as written for coding impact, naming the readings and the codes each gives | `modules/cdi/normalize/normalize.ts` |
 | P-DX-EXTRACT | `coding/p_dx_extract.txt` | List each diagnosis the report documents, with the exact phrases | `modules/icd/extract.ts` |
 | P-DX-PARAMS | `coding/p_dx_params.txt` | State the coding-relevant details documented for one diagnosis | `modules/icd/extract.ts` |
 | P-ICD-CODE | `coding/p_icd_code.txt` | Assign ICD-10-CM codes the highlighted text supports | `modules/selection/codeSelection.ts` |

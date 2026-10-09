@@ -1,5 +1,5 @@
 /** The report run's reply (CDI → diagnoses and ICD-10 → procedures and CPT) in the shapes the companion keeps. */
-import type { Code } from "./companionUi/cards";
+import { messageCard, predictionCard, type Code } from "./companionUi/cards";
 import type { CodedDiagnosis } from "./companionUi/icdCards";
 
 export interface CptCard {
@@ -21,3 +21,6 @@ export function readRun(r: Reply): { icd: { diagnoses: CodedDiagnosis[]; engineE
     : { codes: [], error: `I couldn't code the procedures. ${r.cpt?.error ?? ""}`.trim() };
   return { icd: { diagnoses: r.icd.diagnoses, engineError: r.icd.engineError }, cpt };
 }
+
+/** The CPT card: the codes, or why the procedures couldn't be coded. */
+export const cptCardHtml = (c: CptCard): string => (c.error ? messageCard("CPT prediction", c.error) : predictionCard("cpt", c.codes));

@@ -21,6 +21,19 @@ export interface CodedDiagnosis extends Diagnosis {
   trail: JevTrail | null;
 }
 
+/** Where coding is, shown to the provider while they wait. done/total count diagnoses within a step. */
+export interface IcdStep {
+  step: "cdi" | "extract" | "params" | "codes" | "done";
+  /** Set by the report run, whose first step is CDI. */
+  withCdi?: boolean;
+  label: string;
+  done?: number;
+  total?: number;
+  /** Results so far, so earlier steps can show what they found: the diagnoses, then each code as it lands. */
+  found?: string[];
+  coded?: { phrase: string; code: string | null }[];
+}
+
 /** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
 function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit {
   const statements: Record<string, string> = {};
@@ -36,18 +49,28 @@ function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit 
  * ICD-10-CM code per diagnosis from the Jev engine. Diagnoses whose status is not coded (history,
  * ruled out, uncertain by default) are returned without a code so the provider still sees them.
  */
-export async function predictIcd(raw: Block[], cleanedRaw?: Block[]): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
+export async function predictIcd(
+  raw: Block[],
+  onStep: (s: IcdStep) => void = () => undefined,
+  cleanedRaw?: Block[],
+): Promise<{ diagnoses: CodedDiagnosis[]; usage: Usage[]; engineError?: string }> {
   const cfg = getConfig().icd_pipeline;
   const blocks = redactBlocks(raw);
   // The CDI-cleaned report, when the report run made one: read for meaning, never quoted.
   const cleaned = cleanedRaw ? redactBlocks(cleanedRaw) : blocks;
   const usage: Usage[] = [];
 
+  onStep({ step: "extract", label: "Finding the diagnoses in the report" });
   const { diagnoses, usage: u1 } = await extractDiagnoses(blocks, cleaned);
   usage.push(u1);
   const coded = diagnoses.map((d) => cfg.include_statuses.includes(d.status));
+  const toCode = coded.filter(Boolean).length;
+  const found = diagnoses.map((d) => d.phrase);
 
   const paramsErrors: (string | undefined)[] = [];
+  let read = 0;
+  const paramsLabel = `Found ${diagnoses.length} ${diagnoses.length === 1 ? "diagnosis" : "diagnoses"}, reading coding details`;
+  if (toCode) onStep({ step: "params", label: paramsLabel, done: 0, total: toCode, found });
   const params = await mapLimit(diagnoses, cfg.param_concurrency, async (dx, i) => {
     if (!coded[i]) return null;
     try {
@@ -58,6 +81,8 @@ export async function predictIcd(raw: Block[], cleanedRaw?: Block[]): Promise<{ 
       // Coding goes on without the details, but the reason is kept for the review note.
       paramsErrors[i] = `Coding details could not be read: ${err instanceof Error ? err.message : String(err)}`;
       return null;
+    } finally {
+      onStep({ step: "params", label: paramsLabel, done: ++read, total: toCode, found });
     }
   });
 
@@ -66,7 +91,14 @@ export async function predictIcd(raw: Block[], cleanedRaw?: Block[]): Promise<{ 
   let engineError: string | undefined;
   if (units.length) {
     try {
-      results = await runJev(units);
+      const codesLabel = "Choosing the ICD-10 codes";
+      const landed: { phrase: string; code: string | null }[] = [];
+      const phraseOf = new Map(units.map((u) => [u.uid, u.phrase]));
+      onStep({ step: "codes", label: codesLabel, done: 0, total: units.length, found, coded: [] });
+      results = await runJev(units, (uid, code) => {
+        landed.push({ phrase: phraseOf.get(uid) ?? uid, code });
+        onStep({ step: "codes", label: codesLabel, done: landed.length, total: units.length, found, coded: [...landed] });
+      });
     } catch (err) {
       engineError = String(err instanceof Error ? err.message : err);
     }

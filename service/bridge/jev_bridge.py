@@ -7,7 +7,7 @@ nothing in that folder is modified. Uses only the standard library, like the eng
 The engine's pick-one questions go to the OpenAI Decisions API by default (provider "decisions",
 OPENAI_API_KEY), or to Jev (provider "jev", TYPESAFE_API_KEY). GEMINI_API_KEY powers the optional fallback.
 """
-import argparse, json, os, sys
+import argparse, json, os, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -55,9 +55,11 @@ def main():
     gemini = None
     if req.get('gemini') and not dry and os.environ.get('GEMINI_API_KEY'):
         try:
-            from icd_gemini_fallback import GeminiClient, fallback
-            gemini = (GeminiClient(os.environ['GEMINI_API_KEY'], req.get('gemini_model') or 'gemini-2.5-flash'), fallback)
-        except ImportError:  # not in every engine package; walks that end without a code stay uncoded
+            from icd_gemini_fallback import fallback
+            from gemini_client import CappedGeminiClient
+            gemini = (CappedGeminiClient(os.environ['GEMINI_API_KEY'], req.get('gemini_model') or 'gemini-2.5-flash',
+                                         req.get('gemini_thinking') or 'low'), fallback)
+        except ImportError:  # icd_gemini_fallback is not in every engine package; walks that end without a code stay uncoded
             gemini = None
 
     def describe(code):
@@ -118,8 +120,18 @@ def main():
         except Exception as e:  # one diagnosis failing never sinks the others
             return {'uid': u['uid'], 'code': None, 'error': str(e)[:300]}
 
+    lock = threading.Lock()
+
+    def run_and_report(u):
+        # One PROGRESS line on stderr per finished diagnosis, so the provider sees how far coding is.
+        out = run(u)
+        with lock:
+            sys.stderr.write('PROGRESS ' + json.dumps({'uid': out['uid'], 'code': out.get('code')}) + '\n')
+            sys.stderr.flush()
+        return out
+
     with ThreadPoolExecutor(max(1, int(req.get('workers', 4)))) as ex:
-        results = list(ex.map(run, units))
+        results = list(ex.map(run_and_report, units))
     print(json.dumps({'results': results}))
 
 

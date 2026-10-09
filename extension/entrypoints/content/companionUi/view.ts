@@ -122,6 +122,15 @@ export function openCard(html: string, placement: Placement = "pointer", anchor?
   window.clearTimeout(morphTimer);
   const from = shell.getBoundingClientRect();
   panel.innerHTML = html;
+  // Opening a collapsed section grows the card down to the screen's edge, then it scrolls inside.
+  panel.querySelectorAll("details").forEach((d) =>
+    d.addEventListener("toggle", () => {
+      if (!panel) return;
+      panel.style.maxHeight = "none";
+      const top = panel.getBoundingClientRect().top;
+      panel.style.maxHeight = `${Math.min(panel.scrollHeight, innerHeight - top - MARGIN)}px`;
+    }),
+  );
   // Measure the card's natural size without showing it.
   shell.classList.add("measuring");
   // Never taller than the screen; anything more scrolls inside the card.

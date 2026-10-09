@@ -37,7 +37,7 @@ export interface JevTrail {
  * Step 3: ICD-10-CM codes from the ICD engine, its questions answered by the Decisions API (or Jev).
  * It runs as a Python child process through bridge/jev_bridge.py; the engine folder is never modified.
  */
-export function runJev(units: JevUnit[]): Promise<JevResult[]> {
+export function runJev(units: JevUnit[], onUnitDone?: (uid: string, code: string | null) => void): Promise<JevResult[]> {
   const icd = getConfig().icd_pipeline;
   const cfg = { ...icd, jev_path: resolve(SERVICE_ROOT, icd.jev_path) };
   // Without this check a missing engine surfaces as a Python import traceback.
@@ -56,7 +56,23 @@ export function runJev(units: JevUnit[]): Promise<JevResult[]> {
       reject(new Error("The ICD engine took too long"));
     }, cfg.timeout_ms);
     child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
+    let pending = "";
+    child.stderr.on("data", (d) => {
+      err += d;
+      // The bridge writes one "PROGRESS {...}" line per finished diagnosis.
+      pending += d;
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("PROGRESS ")) continue;
+        try {
+          const p = JSON.parse(line.slice(9)) as { uid: string; code?: string | null };
+          onUnitDone?.(p.uid, p.code ?? null);
+        } catch {
+          /* a malformed progress line only loses one progress tick */
+        }
+      }
+    });
     child.on("error", (e) => {
       clearTimeout(timer);
       reject(e);

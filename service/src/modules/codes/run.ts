@@ -3,7 +3,7 @@ import type { Usage } from "../../core/types";
 import { normalizeReport } from "../cdi/normalize/normalize";
 import { predictCpt, type CptResult } from "../cpt/pipeline";
 import type { Block } from "../icd/extract";
-import { predictIcd } from "../icd/pipeline";
+import { predictIcd, type IcdStep } from "../icd/pipeline";
 
 export interface CodesRun {
   cdi: { blocks: Block[]; confidence: number; error?: string };
@@ -19,10 +19,13 @@ const failed = (err: unknown) => ({ error: err instanceof Error ? err.message : 
  * cleaned text. The two coding paths depend only on CDI, so they run side by side. A CDI failure
  * passes the original report on; a coding failure is returned for its own card, never thrown.
  */
-export async function runCodes(raw: Block[]): Promise<CodesRun> {
+export async function runCodes(raw: Block[], onStep: (s: IcdStep) => void = () => undefined): Promise<CodesRun> {
   const blocks = redactBlocks(raw).map(({ heading, text }) => ({ heading, text }));
   const usage: Usage[] = [];
 
+  // Every step says the run began with CDI, so the progress card shows that step too.
+  const step = (s: IcdStep) => onStep({ ...s, withCdi: true });
+  step({ step: "cdi", label: "Cleaning the report (CDI)" });
   let cdi: CodesRun["cdi"];
   try {
     const r = await normalizeReport(blocks);
@@ -32,7 +35,7 @@ export async function runCodes(raw: Block[]): Promise<CodesRun> {
     cdi = { blocks, confidence: 0, error: failed(err).error };
   }
 
-  const [icd, cpt] = await Promise.all([predictIcd(blocks, cdi.blocks).catch(failed), predictCpt(cdi.blocks).catch(failed)]);
+  const [icd, cpt] = await Promise.all([predictIcd(blocks, step, cdi.blocks).catch(failed), predictCpt(cdi.blocks).catch(failed)]);
   if ("usage" in icd) usage.push(...icd.usage);
   if ("usage" in cpt) usage.push(...cpt.usage);
   return { cdi, icd, cpt, usage };

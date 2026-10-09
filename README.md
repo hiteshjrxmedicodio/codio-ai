@@ -101,10 +101,18 @@ the panel saves (`utils/bg/reviewStore.ts` → History record under the chart's 
 its thumbs, voice questions), so the panel only needs opening for more; opened on a coded page it shows those
 codes and that review instead of reading the report again. After a refresh, a report already approved this
 session is read again and, if its words are unchanged, the last codes come straight back from the session
-cache (`utils/bg/reportCache.ts`); a changed report is coded again. Hold ⌘⌥ → listening mic, answered in place.
+cache (`utils/bg/reportCache.ts`); a changed report is coded again. The answer and the cache are kept per
+page address, and in Codio's PDF viewer per PDF (`reportMemory.ts` `pageKey`), so "Not now" on one PDF never
+silences the next one opened in the same tab. While the local service is not running, the PDF viewer says so
+in a bar under its header and keeps asking every 5 s, so it picks the tab up by itself once the service is
+started; on web pages the companion simply stays off until the next load. Hold ⌘⌥ → listening mic, answered in place.
 Click elsewhere returns it to the pill and clears the highlight. Code: `extension/entrypoints/content/
 companion.ts` (controller), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
 `selection.ts`, `pushToTalk.ts`; recording via `entrypoints/offscreen/`. The side panel remains for chat.
+Reloading Codio in `chrome://extensions` puts a fresh content script into every open http(s) tab
+(`background.ts` `injectIntoOpenTabs`, on `onInstalled`); the copy left by the old build sees the new one
+(WXT's content-script context) and switches itself off, so the EMR page need not be reloaded and no
+"Extension context invalidated" errors pile up.
 
 **ICD pipeline.** On a report the provider allowed, it runs automatically: diagnosis extraction (`P-DX-EXTRACT`, each
 diagnosis with the exact phrases that state it, highlighted and numbered on the report) → coding parameters per
@@ -115,6 +123,10 @@ pick-one questions are answered by the **OpenAI Decisions API** (`bridge/decisio
 `decisions`, the default) or by Jev (provider `jev`, needs `TYPESAFE_API_KEY`). The engine folder is never edited.
 Everything sent is redacted first. History, ruled-out and uncertain diagnoses are listed but not coded. Each result carries
 `trail` (the engine's path, grouped for display) so the companion can show how the code was reached.
+The companion runs it as a job (`POST /v1/icd/jobs`, then `GET /v1/icd/jobs/:id`) and shows which step it is on:
+finding diagnoses, reading coding details (n of N), choosing codes (n of N, one tick per diagnosis the engine finishes).
+The Gemini fallback uses `bridge/gemini_client.py`, which caps thinking on every model. The engine's own client caps
+it only for gemini-2.5, so newer models ran out of output budget and every fallback came back `gemini_invalid_final_response`.
 
 **Report run.** On an allowed report the companion makes one call, `POST /v1/codes/run`
 (`modules/codes/run.ts`): **CDI** (`P-CDI-NORMALIZE`, ported from the Codio engine's cleaning + CDI step: typos,

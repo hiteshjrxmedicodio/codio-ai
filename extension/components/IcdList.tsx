@@ -16,7 +16,6 @@ export function IcdList({ icd }: { icd: { diagnoses: SavedDiagnosis[]; engineErr
       </p>
       {icd.diagnoses.map((d, i) => (
         <article key={i} className="flex items-start gap-3 rounded-xl border border-line bg-raised px-3 py-2.5">
-          <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-coding text-[11px] font-bold text-white">{i + 1}</span>
           <div className="min-w-0 flex-1">
             <p className="text-ink">{d.phrase}</p>
             {d.code ? (

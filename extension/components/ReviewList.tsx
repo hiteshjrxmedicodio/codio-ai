@@ -34,7 +34,7 @@ export function ReviewList({ review }: { review: SavedReview }) {
                 </span>
               )}
             </div>
-            <p className="mt-1 font-medium text-ink">{i + 1}. {s.title}</p>
+            <p className="mt-1 font-medium text-ink">{s.title}</p>
             {s.quotes.map((q, j) => (
               <p key={j} title={q.text} className="mt-1 line-clamp-3 border-l-2 border-line pl-2 text-[12.5px] text-muted">“{q.text}”</p>
             ))}

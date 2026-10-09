@@ -7,12 +7,13 @@
  */
 import { annotate, clearAnnotations, focusSuggestion } from "./annotate";
 import * as card from "./companionUi/cards";
-import { icdDetailCard, icdListCard, type CodedDiagnosis } from "./companionUi/icdCards";
+import { icdDetailCard, icdListCard, icdProgressCard, mergeSameCode, sameCodeLeaders, type CodedDiagnosis } from "./companionUi/icdCards";
+import { runIcdJob } from "./icdJob";
 import * as dock from "./companionUi/dock";
 import * as view from "./companionUi/view";
 import { readWholeReport } from "./reportReader";
 import { consent, fingerprint, pageKey, remember } from "./reportMemory";
-import { readRun, type CptCard } from "./reportRun";
+import { cptCardHtml, readRun, type CptCard } from "./reportRun";
 
 export { consent };
 
@@ -147,7 +148,9 @@ function mark(set: "icd" | "review"): void {
   const r = report;
   if (!r || marked === set) return;
   marked = set;
-  if (set === "icd") annotate((r.icd?.diagnoses ?? []).map((d) => d.quotes.map((q) => q.text)), pickDiagnosis);
+  // Phrases sharing a code are highlighted as one: all their quotes sit under the first phrase's marker.
+  const dx = r.icd?.diagnoses ?? [], lead = sameCodeLeaders(dx);
+  if (set === "icd") annotate(dx.map((_, i) => dx.flatMap((d, j) => (lead[j] === i ? d.quotes.map((q) => q.text) : []))), pickDiagnosis);
   else annotate(r.suggestions.map((s, i) => (r.votes[i] === "down" ? [] : s.quotes.map((q) => q.text))), pickSuggestion);
 }
 
@@ -155,8 +158,7 @@ function mark(set: "icd" | "review"): void {
 function renderIcd(focus = true): void {
   const r = report;
   if (!r?.icd) return;
-  const d = viewingDx === null ? undefined : r.icd.diagnoses[viewingDx];
-  if (d && viewingDx !== null) show(icdDetailCard(d, viewingDx), "icd", focus);
+  if (viewingDx !== null && r.icd.diagnoses[viewingDx]) show(icdDetailCard(mergeSameCode(r.icd.diagnoses, viewingDx)), "icd", focus);
   else show(icdListCard(r.icd.diagnoses, r.icd.engineError), "icd", focus);
 }
 
@@ -164,6 +166,7 @@ function renderIcd(focus = true): void {
 function pickDiagnosis(index: number): void {
   if (!report?.icd?.diagnoses[index]) return;
   mark("icd");
+  index = sameCodeLeaders(report.icd.diagnoses)[index] ?? index;
   viewingDx = index;
   focusSuggestion(index);
   renderIcd();
@@ -269,8 +272,7 @@ function present(r: Report): void {
   marked = null;
   mark("icd");
   renderIcd();
-  const cpt = report.cpt;
-  if (cpt) show(cpt.error ? card.messageCard("CPT prediction", cpt.error) : card.predictionCard("cpt", cpt.codes), "cpt", false);
+  if (report.cpt) show(cptCardHtml(report.cpt), "cpt", false);
   if (report.checked) renderReview(false);
 }
 
@@ -299,11 +301,10 @@ async function readReport(reuse = false): Promise<void> {
     if (usable) {
       if (usable.fingerprint === fp) return present(usable.report);
       show(card.loadingCard("ICD-10 codes", "The report changed since last time. Coding it again…"), "icd");
-    } else show(card.loadingCard("ICD-10 codes", "Finding each diagnosis and its code… this can take a minute."), "icd");
+    }
     const coverage = { reachedEnd: page.reachedEnd, steps: page.steps, method: "the full report" };
-    // One run: CDI cleans the report, then diagnoses → ICD-10 and procedures → CPT.
     showPrediction("cpt", null);
-    const { icd, cpt } = readRun(await send({ type: "codes:run", blocks: page.blocks }));
+    const { icd, cpt } = readRun(await runIcdJob(page.blocks, (step) => show(icdProgressCard(step), "icd"), "codes"));
     present({ title: document.title, blocks: page.blocks, coverage, icd, cpt, suggestions: [], sections: [], votes: {}, fixes: {}, checked: false });
     persist();
     if (pendingQuestion) {

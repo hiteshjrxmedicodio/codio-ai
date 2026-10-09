@@ -19,6 +19,7 @@
       #pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0 40px; }
       .page { position: relative; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
       .page canvas { display: block; }
+      #notice { background: #4a3200; color: #ffe0a8; text-align: center; padding: 8px 16px; line-height: 1.5; }
       #status { color: var(--text); text-align: center; padding: 60px 20px; max-width: 520px; margin: 0 auto; line-height: 1.6; }
       #status button { margin-top: 14px; background: #00309f; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: 600 13px system-ui, sans-serif; cursor: pointer; }
     </style>
@@ -30,6 +31,7 @@
       <button id="chrome" type="button" title="Open this PDF in Chrome's own viewer">Open in Chrome's viewer</button>
       <a id="download" download>Download</a>
     </header>
+    <div id="notice" hidden></div>
     <div id="status">Opening the PDF…</div>
     <main id="pages"></main>
     <script type="module" src="./main.ts"></script>

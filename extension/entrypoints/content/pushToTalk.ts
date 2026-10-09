@@ -18,7 +18,7 @@ async function stop(cancel: boolean): Promise<void> {
   holding = false;
   if (cancel) {
     setCompanionMode("idle");
-    browser.runtime.sendMessage({ type: "ptt:cancel" }).catch(() => undefined);
+    if (browser.runtime?.id) browser.runtime.sendMessage({ type: "ptt:cancel" }).catch(() => undefined);
     return;
   }
   setCompanionMode("working");

@@ -84,31 +84,36 @@ function ensureStyle(): void {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    ::highlight(${HIGHLIGHT}) { background-color: rgba(251, 191, 36, .28); text-decoration: underline 2px rgba(194, 65, 12, .7); }
-    ::highlight(${ACTIVE}) { background-color: rgba(251, 191, 36, .55); text-decoration: underline 2px #c2410c; }`;
+    ::highlight(${HIGHLIGHT}) { background-color: rgba(0, 48, 159, .07); }
+    ::highlight(${ACTIVE}) { background-color: rgba(0, 48, 159, .18); }`;
   (document.head ?? document.documentElement).appendChild(style);
 }
 
 const MARK_STYLE = `
   :host { all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483645; }
-  .b { position: fixed; width: 20px; height: 20px; border-radius: 50%; background: #c2410c; color: #fff; pointer-events: auto;
-    font: 700 11px/20px system-ui, sans-serif; text-align: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25);
-    border: 2px solid #fff; transform: translate(-50%, -60%); transition: transform .15s; }
-  .b:hover, .b.on { transform: translate(-50%, -60%) scale(1.15); background: #03045a; }`;
+  .b { position: fixed; width: 10px; height: 10px; border-radius: 50%; background: #fff; color: #00309f; pointer-events: auto;
+    cursor: pointer; box-shadow: 0 1px 3px rgba(3,4,90,.18);
+    border: 1px solid #c9d3f0; transform: translate(-100%, 4px); transition: transform .15s, background .15s, color .15s; }
+  .b:hover, .b.on { background: #03045a; color: #fff; border-color: #03045a; }`;
 
-/** Keep each marker at the start of its highlight as the page scrolls or reflows. */
+/** Keep each marker in the margin just left of its highlight; markers that would overlap sit side by side. */
+const BADGE = 12;
 function placeBadges(): void {
   if (!badges) return;
+  const placed: { left: number; top: number }[] = [];
   for (const m of marks) {
     const el = badges.querySelector<HTMLElement>(`[data-i="${m.index}"]`);
     const rect = m.range.getClientRects()[0];
     if (!el) continue;
     const visible = rect && rect.bottom > 0 && rect.top < innerHeight;
     el.style.display = visible ? "block" : "none";
-    if (rect) {
-      el.style.left = `${Math.max(12, rect.left - 4)}px`;
-      el.style.top = `${rect.top}px`;
-    }
+    if (!rect || !visible) continue;
+    let left = Math.max(BADGE + 4, rect.left - 4);
+    while (placed.some((p) => Math.abs(p.top - rect.top) < BADGE && Math.abs(p.left - left) < BADGE)) left -= BADGE;
+    if (left < BADGE) left = rect.left + rect.width + BADGE;
+    placed.push({ left, top: rect.top });
+    el.style.left = `${left}px`;
+    el.style.top = `${rect.top}px`;
   }
 }
 
@@ -140,7 +145,6 @@ export function annotate(quotesPerSuggestion: string[][], pick: (index: number) 
     const b = document.createElement("div");
     b.className = "b";
     b.dataset.i = String(m.index);
-    b.textContent = String(m.index + 1);
     b.title = "Open in Codio";
     b.addEventListener("click", (e) => {
       e.stopPropagation();

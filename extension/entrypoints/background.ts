@@ -6,7 +6,8 @@
 import { cancelRecording, startRecording, stopRecording } from "@/utils/bg/recorder";
 import { recallReport, rememberReport } from "@/utils/bg/reportCache";
 import { saveReview, type ReviewSave } from "@/utils/bg/reviewStore";
-import { companionSettings, post } from "@/utils/bg/service";
+import { companionSettings, get, post } from "@/utils/bg/service";
+import type { ScriptPublicPath } from "wxt/utils/inject-script";
 
 type Message = { type?: string; [key: string]: unknown };
 
@@ -27,6 +28,25 @@ async function openInViewer(tabId: number, url: string): Promise<void> {
   await browser.tabs.update(tabId, { url: `${browser.runtime.getURL(VIEWER)}?file=${encodeURIComponent(url)}` });
 }
 
+/**
+ * Chrome puts content scripts only into pages loaded after Codio was installed or reloaded. On
+ * install and on every reload, put them into the open tabs too, so the EMR page need not be
+ * reloaded; the copy from the old build notices the new one and switches itself off.
+ */
+const PAGE_SCRIPTS: ScriptPublicPath[] = ["/content-scripts/content.js"];
+const FRAME_SCRIPTS: ScriptPublicPath[] = ["/content-scripts/filler.js"];
+async function injectIntoOpenTabs(): Promise<void> {
+  // Pages still loading get the manifest's copy on their own; injecting there too would double it.
+  const tabs = await browser.tabs.query({ url: ["http://*/*", "https://*/*"], status: "complete" }).catch(() => []);
+  await Promise.all(
+    tabs.map(async (t) => {
+      if (t.id === undefined) return;
+      await browser.scripting.executeScript({ target: { tabId: t.id }, files: PAGE_SCRIPTS }).catch(() => undefined);
+      await browser.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: FRAME_SCRIPTS }).catch(() => undefined);
+    }),
+  );
+}
+
 export default defineBackground(() => {
   browser.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
   // The panel opens a port on load; accepted so the panel can tell it is connected.
@@ -44,14 +64,18 @@ export default defineBackground(() => {
   const sweep = () =>
     browser.tabs.query({}).then((tabs) => tabs.forEach((t) => t.id !== undefined && t.url && void openInViewer(t.id, t.url))).catch(() => undefined);
   browser.runtime.onStartup.addListener(sweep);
-  browser.runtime.onInstalled.addListener(sweep);
+  browser.runtime.onInstalled.addListener(() => {
+    sweep();
+    void injectIntoOpenTabs();
+  });
 
   browser.runtime.onMessage.addListener((message: Message, sender) => {
     switch (message?.type) {
       case "pdf:skip":
         return skipped().then((list) => browser.storage.session.set({ [SKIP_KEY]: [...list, String(message.url)] }));
       case "companion:config":
-        return companionSettings().then((s) => s ?? { enabled: false, clinical_hints: [], min_hits: 3 });
+        // `unreachable` lets the PDF viewer say the service is down instead of showing nothing.
+        return companionSettings();
       case "select:code":
         return post("/v1/select/code", { text: message.text ?? "", context: message.context ?? "" });
       case "report:check":
@@ -72,8 +96,17 @@ export default defineBackground(() => {
         return post("/v1/cdi/fix", { suggestion: message.suggestion, sections: message.sections, setting: "unknown" });
       case "icd:predict":
         return post("/v1/icd/predict", { blocks: message.blocks });
+      case "icd:start":
+        // ICD coding as a job, so the card can show which step it is on.
+        return post("/v1/icd/jobs", { blocks: message.blocks });
+      case "icd:status":
+        return get(`/v1/icd/jobs/${encodeURIComponent(String(message.id))}`);
+      case "codes:start":
+        // The report run as a job: CDI, then diagnoses → ICD-10 and procedures → CPT, with its steps.
+        return post("/v1/codes/jobs", { blocks: message.blocks });
+      case "codes:status":
+        return get(`/v1/codes/jobs/${encodeURIComponent(String(message.id))}`);
       case "codes:run":
-        // The report run: CDI, then diagnoses → ICD-10 and procedures → CPT.
         return post("/v1/codes/run", { blocks: message.blocks });
       case "cpt:predict":
         return post("/v1/cpt/predict", { blocks: message.blocks });

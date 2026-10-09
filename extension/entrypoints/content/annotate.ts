@@ -24,7 +24,7 @@ let hits: Mark[] = [];
 
 /**
  * A plain click on highlighted words opens that item. A click that ends
- * a text selection is left alone, so highlight-to-code still works on top of a highlight.
+ * a text selection is left alone, so words can still be highlighted for a spoken question.
  */
 function onPageClick(e: MouseEvent): void {
   if (!onPick || !hits.length || e.button !== 0 || !window.getSelection()?.isCollapsed) return;

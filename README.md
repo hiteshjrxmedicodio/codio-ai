@@ -84,12 +84,9 @@ by the reading and summary prompts. Limitation: a PDF or screenshot is an image,
 text exists to redact; the prompts tell it not to transcribe identifiers and the output is scrubbed, but the
 image itself still reaches Google. A BAA with Google and OpenAI is required before real patient data is used.
 
-**Companion cursor and highlight-to-code.** While the Codio side panel is open, a small Codio tag follows the
-pointer on the page (it hands over to dictation's fill tag during fill mode). Highlighting text asks the
-Decisions API whether it is a diagnosis, a procedure, both or neither (`D-SELECT-KIND`); codable text gets
-ICD-10-CM (`P-ICD-CODE`) and/or CPT (`P-CPT-CODE`) predictions from Gemini, shown in a card beside the
-selection with a copy button per code (`POST /v1/select/code`, configured under `selection`). Format-invalid
-codes are dropped. A single model call for now; the full engine can replace it later.
+**Companion cursor.** While the Codio side panel is open, a small Codio tag follows the pointer on the page (it
+hands over to dictation's fill tag during fill mode). Highlighting text codes nothing: it only marks the words a
+spoken question is about (see Push-to-talk).
 
 **Push-to-talk.** With the panel open, hold **⌘ Command + ⌥ Option** (Ctrl+Alt on Windows) on the page and speak; the
 companion cursor turns into a pulsing mic ("Listening…"), then "Thinking…" on release. Recording happens in the side
@@ -97,11 +94,9 @@ panel (which owns the microphone permission), Whisper transcribes it, and the te
 answered from the open report in summary mode, or sent to the chat otherwise. Any other key during the hold cancels.
 
 **Codio AI companion (primary interface, no panel needed).** One element on every page that follows the
-pointer and changes shape in place: highlight text → code card (its ICD-10-CM or CPT codes, code and name only, placed beside the
-highlight and kept on screen), or, when the words document neither a diagnosis nor a procedure, an "Ask about
-this" card: **Ask by voice** listens until the next click or Enter (Escape cancels), or hold the push-to-talk
-keys, and the question is answered with the highlighted words attached (from them and their surrounding text
-when no report has been read, so no permission is needed; `selection.ts` `takeHighlight`, `pushToTalk.ts` `talkByClick`); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
+pointer and changes shape in place: highlighted words plus the push-to-talk keys → the question is answered with
+the highlighted words attached (from them and their surrounding text when no report has been read, so no permission
+is needed; `selection.ts` `takeHighlight`); a page that looks like a report (local count of its section labels, such as "Pre-op diagnosis" or
 "Assessment:", never its running text, so a page written about coding is not mistaken for one; nothing sent) →
 permission card ("Medical coding · Code this report?", naming CDI, ICD-10 and CPT, in the first card) → on yes, the whole report
 is read and the report run (CDI, then ICD-10 and CPT; see Report run) goes through it (no summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
@@ -133,7 +128,7 @@ silences the next one opened in the same tab. While the local service is not run
 in a bar under its header and keeps asking every 5 s, so it picks the tab up by itself once the service is
 started; on web pages the companion simply stays off until the next load. Hold ⌘⌥ → listening mic, answered in place.
 Click elsewhere returns it to the pill and clears the highlight. Code: `extension/entrypoints/content/
-companion.ts` (controller), `codeCard.ts` (highlight-to-code card), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
+companion.ts` (controller), `issueCard.ts` (the card beside a documentation issue), `companionUi/` (view, styles, cards), `annotate.ts`, `permission.ts`,
 `selection.ts`, `pushToTalk.ts`; recording via `entrypoints/offscreen/`. The side panel remains for chat.
 Reloading Codio in `chrome://extensions` puts a fresh content script into every open http(s) tab
 (`background.ts` `injectIntoOpenTabs`, on `onInstalled`); the copy left by the old build sees the new one

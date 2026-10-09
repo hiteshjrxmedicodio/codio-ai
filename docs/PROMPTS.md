@@ -21,8 +21,6 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-DXEX-CLASSIFY | `coding/p_dxex_classify.txt` | Bucket each phrase and decide whether it is confirmed and codeable (Codio engine P006) | `modules/icd/dxex.ts` |
 | P-DX-EXTRACT | `coding/p_dx_extract.txt` | List each diagnosis the report documents, with the exact phrases | `modules/icd/extract.ts` |
 | P-DX-PARAMS | `coding/p_dx_params.txt` | State the coding-relevant details documented for one diagnosis | `modules/icd/extract.ts` |
-| P-ICD-CODE | `coding/p_icd_code.txt` | Assign ICD-10-CM codes the highlighted text supports | `modules/selection/codeSelection.ts` |
-| P-CPT-CODE | `coding/p_cpt_code.txt` | Assign CPT codes the highlighted text supports | `modules/selection/codeSelection.ts` |
 | P-PROC-EXTRACT | `coding/p_proc_extract.txt` | Decide completion status and list each procedure performed, paired with its parent | `modules/cpt/extract.ts` |
 | P-READ-FILE | `reading/p_read_file.txt` | Transcribe an attached document's clinical text exactly, under its own headings | `modules/files/readFile.ts` |
 | P-READ-MAP | `reading/p_read_section_map.txt` | Assign captured text to the configured standard sections | `modules/reading/sectionMap.ts` |
@@ -37,7 +35,6 @@ question instructions under `decision_blocks`. Response schemas live next to the
 | P-GATE | `cdi/p_gate_criticality.txt` | Choice: is this finding critical, and why | `modules/cdi/gate/gate.ts` |
 | D-SCREEN-CON / AMB / INC / VAL | `decisions/p_screen_*.txt` | Probability: is the matching finder worth running | `modules/cdi/prescreen/prescreen.ts` |
 | P-CPT-SELECT | `coding/p_cpt_select.txt` | Choice per procedure: which retrieved CPT candidate matches it | `modules/cpt/select.ts` |
-| D-SELECT-KIND | `decisions/p_select_kind.txt` | Choice: is highlighted text a diagnosis, a procedure, both or neither | `modules/selection/codeSelection.ts` |
 | D-PICK-CONTROL | `decisions/p_pick_control.txt` | Choice: which visible control moves toward the goal | `modules/agent/pickControl.ts` |
 | D-PICK-HISTORY | `decisions/p_pick_history.txt` | Choice: which history-form ICD-10-CM code names a historical diagnosis | `modules/icd/history.ts` |
 | D-PICK-SECTION | `decisions/p_pick_section.txt` | Choice: which dictated section belongs in the clicked field | `modules/dictation/dictation.ts` |

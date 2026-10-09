@@ -81,15 +81,6 @@ const ConfigSchema = z.object({
     identifier_labels: z.array(z.string()).min(1),
     name_titles: z.array(z.string()),
   }),
-  selection: z.object({
-    enabled: z.boolean(),
-    min_chars: z.number().int().positive(),
-    max_chars: z.number().int().positive(),
-    context_chars: z.number().int().nonnegative(),
-    min_confidence: z.number().min(0).max(1),
-    max_codes: z.number().int().positive(),
-    choices: z.array(z.object({ value: z.enum(["diagnosis", "procedure", "both", "neither"]), description: z.string() })).length(4),
-  }),
   companion: z.object({
     enabled: z.boolean(),
     min_hits: z.number().int().positive(),

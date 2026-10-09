@@ -40,8 +40,6 @@ blocks:
   P-DXEX-CLASSIFY: { provider: anthropic, prompt: coding/p_dxex_classify.txt, model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
   P-DX-EXTRACT:  { provider: anthropic, prompt: coding/p_dx_extract.txt, model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 32000, enabled: true }
   P-DX-PARAMS:   { provider: anthropic, prompt: coding/p_dx_params.txt,  model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 16000, enabled: true }
-  P-ICD-CODE:    { prompt: coding/p_icd_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
-  P-CPT-CODE:    { prompt: coding/p_cpt_code.txt,          model: gemini-3.8-flash,      thinking: medium,  temperature: 0,   max_output_tokens: 2048,  enabled: true }
   P-CDI-NORMALIZE: { provider: anthropic, prompt: coding/p_cdi_normalize.txt, model: claude-sonnet-5-5, thinking: low,    temperature: 0, max_output_tokens: 64000, enabled: true }
   P-PROC-EXTRACT:  { provider: anthropic, prompt: coding/p_proc_extract.txt,  model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
   P-CPT-SELECT:    { provider: anthropic, prompt: coding/p_cpt_select.txt,    model: claude-sonnet-5-5, thinking: medium, temperature: 0, max_output_tokens: 32000, enabled: true }
@@ -63,7 +61,6 @@ decision_blocks:
   D-SCREEN-VAL:  { prompt: decisions/p_screen_validation.txt }
   D-PICK-CONTROL: { prompt: decisions/p_pick_control.txt }
   D-PICK-HISTORY: { prompt: decisions/p_pick_history.txt }
-  D-SELECT-KIND:  { prompt: decisions/p_select_kind.txt }
   D-PICK-SECTION: { prompt: decisions/p_pick_section.txt }
 
 # Where the Decisions API replaces a Gemini call. Each falls back to Gemini (or to running the
@@ -151,20 +148,6 @@ privacy:
   # Narrative mentions: titles before a capitalised name. Provider titles (Dr) are not patient identifiers.
   name_titles: [Mr, Mrs, Ms, Miss, Mx]
 
-# Highlight text on a page while the panel is open: the Decisions API decides whether it is a
-# diagnosis, a procedure, both or neither, then Gemini predicts ICD-10-CM and/or CPT codes.
-selection:
-  enabled: true
-  min_chars: 3
-  max_chars: 1500
-  context_chars: 600            # surrounding page text sent to settle laterality, approach and so on
-  min_confidence: 0.5           # below this the triage answer counts as neither
-  max_codes: 3
-  choices:
-    - { value: diagnosis, description: The text documents a condition, symptom or finding the patient has }
-    - { value: procedure, description: The text documents a service, operation, test or treatment performed on the patient }
-    - { value: both,      description: The text documents at least one diagnosis and at least one procedure }
-    - { value: neither,   description: The text documents nothing that would be coded }
 
 # The Codio AI companion on every page. It decides locally (no network) whether a page looks like
 # a medical report by counting these headings; only then does it ask permission to read it. Nothing

@@ -76,8 +76,6 @@ export default defineBackground(() => {
       case "companion:config":
         // `unreachable` lets the PDF viewer say the service is down instead of showing nothing.
         return companionSettings();
-      case "select:code":
-        return post("/v1/select/code", { text: message.text ?? "", context: message.context ?? "" });
       case "report:check":
         // The provider said yes on the page; the CDI check reads the whole report it captured.
         return post<{ suggestions: unknown[] }>("/v1/cdi/check-page", { blocks: message.blocks, setting: "unknown" });

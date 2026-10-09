@@ -1,6 +1,6 @@
 /**
  * The Codio AI companion: one element on the page that follows the pointer and changes shape.
- * Highlight text → it becomes the code card. A medical report → a permission question in the
+ * A medical report → a permission question in the
  * corner, then each diagnosis phrase with its ICD-10 code, the phrases highlighted on the report
  * and each one opening the trail the engine took to its code. Hold ⌘⌥ → it
  * becomes the listening mic and answers in place. Click elsewhere → back to the pill.
@@ -64,7 +64,7 @@ const send = <T>(message: Record<string, unknown>) => browser.runtime.sendMessag
  * Report results go to their own card in the top-right stack (ICD-10 codes, the documentation
  * review, CPT and final codes, answers), which lets the pill keep following the pointer. `focus` opens
  * the card; background updates pass false so they never take over the card being read. (Code cards for
- * a highlight, which open beside it where the pill turns into them, live in codeCard.ts.)
+ * a documentation issue, which open beside its words where the pill turns into them, live in issueCard.ts.)
  */
 function show(html: string, where: dock.CardId = "review", focus = true): void {
   window.clearTimeout(messageTimer);

@@ -8,7 +8,6 @@ import { feedbackRoutes } from "./modules/feedback/feedback.routes";
 import { filesRoutes } from "./modules/files/files.routes";
 import { pageRoutes } from "./modules/page/page.routes";
 import { reportRoutes } from "./modules/report/report.routes";
-import { selectionRoutes } from "./modules/selection/selection.routes";
 import { icdRoutes } from "./modules/icd/icd.routes";
 import { cptRoutes } from "./modules/cpt/cpt.routes";
 import { codesRoutes } from "./modules/codes/codes.routes";
@@ -28,7 +27,6 @@ export function createApp() {
   app.use("/v1/dictation", dictationRoutes);
   app.use("/v1/files", filesRoutes);
   app.use("/v1/report", reportRoutes);
-  app.use("/v1/select", selectionRoutes);
   app.use("/v1/icd", icdRoutes);
   app.use("/v1/cpt", cptRoutes);
   app.use("/v1/codes", codesRoutes);

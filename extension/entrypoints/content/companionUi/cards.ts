@@ -47,29 +47,11 @@ export function messageCard(title: string, text: string): string {
 
 const MIC = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
 
-/** A highlight with nothing to code: the provider is asked to put a question about it by voice. */
-export function askCard(text: string, mac: boolean): string {
-  const quote = text.length > 140 ? `${text.slice(0, 140)}…` : text;
-  const keys = mac ? "⌘ Command + ⌥ Option" : "Ctrl + Alt";
-  return `${head("Codio AI · Ask about this")}<div class="body">
-    <div class="muted">No diagnosis or procedure to code in <q>${esc(quote)}</q>. Ask me a question about it instead.</div>
-    <div class="actions" style="display:flex;align-items:center;gap:8px;margin-top:8px">
-      <button class="btn primary" data-action="voice-ask" style="display:inline-flex;align-items:center;gap:6px">${MIC}Ask by voice</button>
-      <span class="muted" style="font-size:11px">or hold ${esc(keys)} and speak</span>
-    </div></div>`;
-}
-
 function codeRows(label: string, codes: Code[]): string {
   if (!codes.length) return "";
   return `<div class="group">${label}</div>${codes
     .map((c) => `<div class="row"><span class="code">${esc(c.code)}</span><span class="desc">${esc(c.description)}</span></div>`)
     .join("")}`;
-}
-
-/** Only what the provider needs: each code and its name. */
-export function codesCard(kind: string, icd: Code[], cpt: Code[]): string {
-  const title = `Codio AI · ${kind === "both" ? "Diagnosis and procedure" : kind === "diagnosis" ? "Diagnosis" : "Procedure"}`;
-  return `${head(title)}<div class="body">${codeRows("ICD-10-CM", icd)}${codeRows("CPT", cpt)}</div>`;
 }
 
 /** Asks before reading: what the review gives the provider, and what happens to identifiers (redacted in the service before any model sees the text). */

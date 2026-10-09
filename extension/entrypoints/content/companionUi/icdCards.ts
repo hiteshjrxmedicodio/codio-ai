@@ -26,9 +26,8 @@ export interface CodedDiagnosis {
 }
 
 export interface IcdStep {
+  /** cdi: the report run's first step; it shows in the CDI card, not here. */
   step: "cdi" | "extract" | "params" | "codes" | "done";
-  /** The report run cleans the report (CDI) before the ICD steps. */
-  withCdi?: boolean;
   label: string;
   done?: number;
   total?: number;
@@ -37,7 +36,6 @@ export interface IcdStep {
 }
 
 const STEPS: { key: IcdStep["step"]; label: string }[] = [
-  { key: "cdi", label: "Cleaning the report (CDI)" },
   { key: "extract", label: "Finding the diagnoses" },
   { key: "params", label: "Reading coding details" },
   { key: "codes", label: "Choosing the ICD-10 codes" },
@@ -59,9 +57,8 @@ function stepResult(key: IcdStep["step"], s: IcdStep): string {
 
 /** The three coding steps while they run: finished ones ticked with what they found, the current one spinning with its count. */
 export function icdProgressCard(s: IcdStep): string {
-  const steps = STEPS.filter((x) => x.key !== "cdi" || s.withCdi);
-  const at = steps.findIndex((x) => x.key === s.step);
-  const rows = steps.map((x, i) => {
+  const at = STEPS.findIndex((x) => x.key === s.step);
+  const rows = STEPS.map((x, i) => {
     const state = s.step === "done" || i < at ? "done" : i === at ? "now" : "next";
     const mark = state === "done" ? `<span class="tick">✓</span>` : state === "now" ? `<span class="spin"></span>` : `<span class="dot"></span>`;
     const label = x.key === "extract" && state === "done" && s.found ? `Found ${s.found.length} diagnos${s.found.length === 1 ? "is" : "es"}` : x.label;

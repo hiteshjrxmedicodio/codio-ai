@@ -45,7 +45,7 @@ export function codesCard(kind: string, icd: Code[], cpt: Code[]): string {
 }
 
 /** Asks before reading: what the review gives the provider, and what happens to identifiers (redacted in the service before any model sees the text). */
-export const PREDICTION_TITLE: Record<"icd" | "cpt" | "final", string> = { icd: "ICD-10 prediction", cpt: "CPT prediction", final: "Final codes" };
+export const PREDICTION_TITLE: Record<"icd" | "cpt" | "final", string> = { icd: "ICD-10 prediction", cpt: "CPT pipeline", final: "Final codes" };
 
 /** One prediction card: the codes and their names, with the count in the header. */
 export function predictionCard(id: "icd" | "cpt" | "final", list: Code[]): string {
@@ -55,8 +55,8 @@ export function predictionCard(id: "icd" | "cpt" | "final", list: Code[]): strin
 }
 
 export function permissionCard(): string {
-  return `${head("ICD-10 codes")}<div class="body">
-    <div><b style="font-size:13.5px">Code this report?</b><div class="muted">I'll read it end to end, pick out each diagnosis and predict its ICD-10 code. Names and IDs are removed before anything is analysed.</div></div>
+  return `${head("Codio AI")}<div class="body">
+    <div><b style="font-size:13.5px">Code this report?</b><div class="muted">I'll read it end to end, clean it (CDI), then code its diagnoses (ICD-10) and procedures (CPT). Names and IDs are removed before anything is analysed.</div></div>
     <div class="actions"><button class="btn primary" data-action="allow">Code it</button><button class="btn ghost" data-action="deny">Not now</button></div></div>`;
 }
 

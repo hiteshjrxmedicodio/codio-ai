@@ -5,6 +5,8 @@ import { predictIcd, type IcdStep } from "./pipeline";
 
 interface Job {
   step: IcdStep;
+  /** Results of the run's parts as each finishes (the report run: cdi, then icd and cpt), before the whole result. */
+  partial: Record<string, unknown>;
   result?: unknown;
   error?: string;
   finished: boolean;
@@ -21,12 +23,15 @@ function sweep(): void {
 }
 
 /** A coding run as a background job, so the provider can see which step it is on while it runs. */
-export function startJob(first: IcdStep, run: (onStep: (s: IcdStep) => void) => Promise<unknown>): string {
+export function startJob(first: IcdStep, run: (onStep: (s: IcdStep) => void, part: (key: string, value: unknown) => void) => Promise<unknown>): string {
   sweep();
   const id = randomUUID();
-  const job: Job = { step: first, finished: false, at: Date.now() };
+  const job: Job = { step: first, partial: {}, finished: false, at: Date.now() };
   jobs.set(id, job);
-  run((s) => (job.step = s))
+  run(
+    (s) => (job.step = s),
+    (key, value) => (job.partial[key] = value),
+  )
     .then((r) => {
       job.result = r;
       job.step = { step: "done", label: "Done" };
@@ -50,5 +55,5 @@ export const jobStatus: RequestHandler = (req, res) => {
     res.status(404).json({ error: "That coding job has expired" });
     return;
   }
-  res.json({ step: job.step, finished: job.finished, result: job.result, error: job.error });
+  res.json({ step: job.step, partial: job.partial, finished: job.finished, result: job.result, error: job.error });
 };

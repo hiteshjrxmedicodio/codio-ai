@@ -84,8 +84,8 @@ answered from the open report in summary mode, or sent to the chat otherwise. An
 **Codio AI companion (primary interface, no panel needed).** One element on every page that follows the
 pointer and changes shape in place: highlight text → code card (code and name only, placed beside the
 highlight and kept on screen); a page that looks like a report (local heading count, nothing sent) →
-permission card ("Code this report?") → on yes, the whole report is read and the ICD pipeline runs on it (no
-summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
+permission card ("Code this report?", in the first card) → on yes, the whole report is read and the report run
+(CDI, then ICD-10 and CPT; see Report run) goes through it (no summary): the ICD-10 card in the top-right stack lists each extracted diagnosis phrase with its code beside it,
 and each phrase is highlighted and numbered on the report. Clicking a phrase, in the card or on the chart
 (the highlighted words or their marker, `annotate.ts`), opens that diagnosis: its code, the documented
 parameters, and the **prediction trail** the engine took (index lookup, chapter → category → code with
@@ -133,7 +133,11 @@ it only for gemini-2.5, so newer models ran out of output budget and every fallb
 abbreviations, numbers, administrative noise and run-on diagnoses, never a change in meaning; a failure passes the
 original report on) → then side by side **diagnosis extraction → ICD-10-CM** and **procedure extraction → CPT**,
 both reading the cleaned report. Diagnosis quotes are still copied from the original so they highlight on the page.
-The documentation review (P-CON/AMB/INC/WRD) stays one click away. ICD coding runs the engine in `service/engine/jev_icd_engine`
+The companion shows the run as three cards, each filling the moment its own part finishes (the job reports
+`partial.cdi`, then `partial.icd` and `partial.cpt`). "Code this report?" and the page capture live in the first card, **CDI** (each section it cleaned, as written and
+after CDI), **ICD-10 codes** (each diagnosis and the engine's trail) and **CPT pipeline** (each procedure and its journey:
+extracted → searched → candidates with match scores → chosen code, confidence and reason → final code, or why it
+was dropped). The documentation review (P-CON/AMB/INC/WRD) stays one click away. ICD coding runs the engine in `service/engine/jev_icd_engine`
 (`icd_pipeline.jev_path`, relative to `service/`): engine code and CMS FY2026 tabular, index and Excludes/see links
 only. The package's `inputs/gastro/` and `results/` hold production charts (PHI) and are never copied or committed
 (`.gitignore`). This engine version has no index retrieval or Gemini fallback; the bridge uses its

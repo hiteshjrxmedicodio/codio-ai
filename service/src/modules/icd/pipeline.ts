@@ -23,9 +23,8 @@ export interface CodedDiagnosis extends Diagnosis {
 
 /** Where coding is, shown to the provider while they wait. done/total count diagnoses within a step. */
 export interface IcdStep {
+  /** cdi: the report run's first step, shown in the CDI card rather than the ICD progress card. */
   step: "cdi" | "extract" | "params" | "codes" | "done";
-  /** Set by the report run, whose first step is CDI. */
-  withCdi?: boolean;
   label: string;
   done?: number;
   total?: number;
@@ -34,10 +33,14 @@ export interface IcdStep {
   coded?: { phrase: string; code: string | null }[];
 }
 
-/** The engine's state: the diagnosis, its own phrases by section, and the documented parameters. */
+/** The engine's state: the diagnosis, its own phrases (CDI-cleaned) by section, and the documented parameters. */
 function toUnit(i: number, dx: Diagnosis, params: DxParameters | null): JevUnit {
   const statements: Record<string, string> = {};
-  for (const q of dx.quotes) statements[q.section] = statements[q.section] ? `${statements[q.section]} ${q.text}` : q.text;
+  // The engine reads the CDI-cleaned wording; the original quote is only for highlighting on the page.
+  for (const q of dx.quotes) {
+    const said = q.cleaned || q.text;
+    statements[q.section] = statements[q.section] ? `${statements[q.section]} ${said}` : said;
+  }
   if (params?.documented.length) statements["coding details"] = params.documented.map((p) => `${p.name}: ${p.value}`).join("; ");
   // Privacy: everything sent to Jev is redacted, the same as every model call.
   for (const k of Object.keys(statements)) statements[k] = redactText(statements[k] ?? "");

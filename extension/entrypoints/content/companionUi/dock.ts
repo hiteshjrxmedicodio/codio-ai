@@ -7,7 +7,9 @@
  * codes, and answers. Every card
  * always shows its header bar; at most one card is open at a time, and an open card's body has a
  * capped height that scrolls, so the stack never fills the screen. Opening a card folds the rest.
- * A card that updates in the background does not take over the one the provider is reading.
+ * Folding the open card folds the whole stack into a slim strip on the right edge of the window,
+ * which brings the cards back (the last one open) when clicked. A card that updates in the
+ * background does not take over the one the provider is reading, and only pings the strip.
  */
 import { DOCK_STYLE } from "./dockStyle";
 
@@ -17,28 +19,52 @@ const TAG = "codio-ai-dock";
 
 let host: HTMLElement | null = null;
 let stack: HTMLElement | null = null;
+let strip: HTMLElement | null = null;
 let openId: CardId | null = null;
+/** The card to bring back when the strip is clicked. */
+let lastOpen: CardId | null = null;
 
 const cardEl = (id: CardId) => stack?.querySelector<HTMLElement>(`.card[data-id="${id}"]`) ?? null;
 
 export const hasCard = (id: CardId) => Boolean(cardEl(id));
 export const isDockOpen = () => Boolean(stack?.querySelector(".card"));
+const isFolded = () => Boolean(host?.classList.contains("folded"));
 
-/** True when (x, y) is over the stack, so the pill can step out of the way. */
+/** True when (x, y) is over the stack (or the strip it folded into), so the pill can step out of the way. */
 export function overDock(x: number, y: number): boolean {
-  if (!isDockOpen() || !stack) return false;
-  const r = stack.getBoundingClientRect();
+  const el = isFolded() ? strip : stack;
+  if (!isDockOpen() || !el) return false;
+  const r = el.getBoundingClientRect();
   return x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
 }
 
-/** Open one card and fold the others; `null` folds them all. */
+/** Open one card and fold the others; `null` folds the whole stack into the edge strip. */
 function expand(id: CardId | null): void {
   openId = id;
+  if (id) lastOpen = id;
   for (const el of stack?.querySelectorAll<HTMLElement>(".card") ?? []) {
     const open = el.dataset.id === id;
     el.classList.toggle("collapsed", !open);
     el.querySelector(".head")?.setAttribute("aria-expanded", String(open));
   }
+  fold(id === null);
+}
+
+/** The strip stands in for the stack while folded; it shows how many cards wait behind it. */
+function fold(folded: boolean): void {
+  const n = stack?.querySelectorAll(".card").length ?? 0;
+  host?.classList.toggle("folded", folded && n > 0);
+  if (strip) {
+    strip.querySelector(".n")!.textContent = String(n);
+    strip.setAttribute("aria-label", `Show Codio AI's ${n} card${n === 1 ? "" : "s"}`);
+    strip.classList.remove("updated");
+  }
+}
+
+/** The strip was clicked: the stack comes back with the card the provider last had open. */
+function unfold(): void {
+  const first = stack?.querySelector<HTMLElement>(".card")?.dataset.id as CardId | undefined;
+  expand(lastOpen && hasCard(lastOpen) ? lastOpen : (first ?? null));
 }
 
 function onClick(e: MouseEvent, onAction: (e: MouseEvent) => void): void {
@@ -57,8 +83,11 @@ export function mountDock(onAction: (e: MouseEvent) => void): void {
   document.querySelectorAll(TAG).forEach((el) => el.remove());
   host = document.createElement(TAG);
   const root = host.attachShadow({ mode: "closed" });
-  root.innerHTML = `<style>${DOCK_STYLE}</style><div class="stack" role="complementary" aria-label="Codio AI"></div>`;
+  root.innerHTML = `<style>${DOCK_STYLE}</style><div class="stack" role="complementary" aria-label="Codio AI"></div>
+    <button class="strip" type="button" title="Show the cards"><span class="dot"></span><span class="vt">Codio AI</span><span class="n"></span></button>`;
   stack = root.querySelector(".stack");
+  strip = root.querySelector(".strip");
+  strip?.addEventListener("click", unfold);
   stack?.addEventListener("click", (e) => onClick(e, onAction));
   stack?.addEventListener("keydown", (e) => {
     const t = e.target as HTMLElement;
@@ -73,8 +102,8 @@ export function mountDock(onAction: (e: MouseEvent) => void): void {
 
 export function unmountDock(): void {
   host?.remove();
-  host = stack = null;
-  openId = null;
+  host = stack = strip = null;
+  openId = lastOpen = null;
 }
 
 /**
@@ -98,17 +127,24 @@ export function setCard(id: CardId, html: string, focus = true): void {
   const head = el.querySelector(".head");
   head?.setAttribute("role", "button");
   head?.setAttribute("tabindex", "0");
-  if (focus || openId === null || openId === id) expand(id);
+  // While folded, only a card the provider asked for brings the stack back; the rest ping the strip.
+  if (focus || (openId === null && !isFolded()) || openId === id) expand(id);
   else {
     el.classList.add("collapsed");
     if (!isNew) el.classList.add("updated");
     window.setTimeout(() => el?.classList.remove("updated"), 1600);
+    if (isFolded()) {
+      fold(true);
+      strip?.classList.add("updated");
+    }
   }
 }
 
 export function removeCard(id: CardId): void {
   cardEl(id)?.remove();
   if (openId === id) openId = null;
+  if (lastOpen === id) lastOpen = null;
+  fold(isFolded());
 }
 
 export const element = () => host;

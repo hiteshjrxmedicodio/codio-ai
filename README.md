@@ -111,7 +111,9 @@ documentation** in that card runs the CDI check into the Review card, each sugge
 to `/v1/feedback`, then "what to change" from `/v1/cdi/fix`) and thumbs down (logged, dropped from the note).
 The chart shows one set of highlights at a time, the set of the card in use. Card stack
 (`companionUi/dock.ts`): ICD-10, Review, CPT, Final codes, answers; every header always visible, one card open
-at a time with a capped height, the pill keeps following the pointer and only hides over the stack; CPT and
+at a time with a capped height; folding the open card folds the whole stack into a slim strip on the right
+edge (card count on it, pinged by background updates) that brings the last open card back when clicked; the
+pill keeps following the pointer and only hides over the stack or the strip; CPT and
 final cards are filled by the `companion:prediction` message. Everything the companion does is saved where
 the panel saves (`utils/bg/reviewStore.ts` → History record under the chart's IDs: ICD codes, the check and
 its thumbs, voice questions), so the panel only needs opening for more; opened on a coded page it shows those

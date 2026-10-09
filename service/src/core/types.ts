@@ -12,7 +12,8 @@ export interface Quote {
   text: string;
 }
 
-export type FindingKind = "contradiction" | "ambiguity" | "unaddressed" | "wording" | "record";
+/** "wording" is retired (preprocessing owns writing errors); it stays so saved findings still read. */
+export type FindingKind = "contradiction" | "ambiguity" | "unaddressed" | "validation" | "wording" | "record";
 
 export type GateAnswer = "not_real" | "not_critical" | "coding" | "denial" | "interpretation";
 

@@ -33,10 +33,13 @@ const isFolded = () => Boolean(host?.classList.contains("folded"));
 
 /** True when (x, y) is over the stack (or the strip it folded into), so the pill can step out of the way. */
 export function overDock(x: number, y: number): boolean {
-  const el = isFolded() ? strip : stack;
-  if (!isDockOpen() || !el) return false;
-  const r = el.getBoundingClientRect();
-  return x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
+  if (!isDockOpen()) return false;
+  // The cards themselves, not the stack: the stack is padded to leave room for the cards' shadows.
+  const boxes = isFolded() ? [strip] : [...(stack?.querySelectorAll<HTMLElement>(".card") ?? [])];
+  return boxes.some((el) => {
+    const r = el?.getBoundingClientRect();
+    return !!r && x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
+  });
 }
 
 /** Open one card and fold the others; `null` folds the whole stack into the edge strip. */

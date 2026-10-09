@@ -39,7 +39,7 @@ blocks:
   P-CON:  { prompt: cdi/p_con_contradictions.txt, model: gemini-3.8-flash, thinking: medium, temperature: 0, max_output_tokens: 8192, enabled: true }
   P-AMB:  { prompt: cdi/p_amb_ambiguity.txt,      model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
   P-INC:  { prompt: cdi/p_inc_unaddressed.txt,    model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
-  P-WRD:  { prompt: cdi/p_wrd_wording.txt,        model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 8192, enabled: true }
+  P-VAL:  { prompt: cdi/p_val_validation.txt,     model: gemini-3.8-flash, thinking: medium, temperature: 0, max_output_tokens: 8192, enabled: true }
   P-GATE: { prompt: cdi/p_gate_criticality.txt,   model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 1024, enabled: true }
   P-FIX:  { prompt: cdi/p_fix_guidance.txt,       model: gemini-3.8-flash, thinking: low,    temperature: 0, max_output_tokens: 1024, enabled: true }
   P-DICT-REPORT: { prompt: dictation/p_dictation_report.txt, model: gemini-3.8-flash, thinking: low, temperature: 0, max_output_tokens: 8192, enabled: true }
@@ -49,7 +49,7 @@ decision_blocks:
   D-SCREEN-CON:  { prompt: decisions/p_screen_contradiction.txt }
   D-SCREEN-AMB:  { prompt: decisions/p_screen_ambiguity.txt }
   D-SCREEN-INC:  { prompt: decisions/p_screen_unaddressed.txt }
-  D-SCREEN-WRD:  { prompt: decisions/p_screen_wording.txt }
+  D-SCREEN-VAL:  { prompt: decisions/p_screen_validation.txt }
   D-PICK-CONTROL: { prompt: decisions/p_pick_control.txt }
   D-PICK-HISTORY: { prompt: decisions/p_pick_history.txt }
   D-SELECT-KIND:  { prompt: decisions/p_select_kind.txt }
@@ -73,7 +73,7 @@ decisions:
       P-CON: D-SCREEN-CON
       P-AMB: D-SCREEN-AMB
       P-INC: D-SCREEN-INC
-      P-WRD: D-SCREEN-WRD
+      P-VAL: D-SCREEN-VAL
   pick_control:
     enabled: true
     max_controls: 40             # visible controls offered as choices, after blocked ones are removed
@@ -106,7 +106,8 @@ agent:
   chart_id_labels: [Med ID, MRN, Encounter ID, Encounter, Claim ID, Account, Account No, Visit ID, FIN, CSN, Patient ID]
 
 pipeline:
-  finders: [P-CON, P-AMB, P-INC, P-WRD]      # run in parallel with the code screen
+  # Spelling, grammar and abbreviations are not here: preprocessing (P-CDI-NORMALIZE) owns them.
+  finders: [P-CON, P-AMB, P-INC, P-VAL]      # run in parallel with the code screen
   gate_concurrency: 8
   max_suggestions: 5
   shown_answers: [coding, denial, interpretation]   # gate answers a provider can see, in rank order

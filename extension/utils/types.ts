@@ -21,7 +21,7 @@ export interface CapturedBlock {
 export interface Suggestion {
   id: string;
   block: string;
-  kind: "contradiction" | "ambiguity" | "unaddressed" | "wording" | "record";
+  kind: "contradiction" | "ambiguity" | "unaddressed" | "validation" | "wording" | "record";
   title: string;
   quotes: Quote[];
   detail: Record<string, unknown>;

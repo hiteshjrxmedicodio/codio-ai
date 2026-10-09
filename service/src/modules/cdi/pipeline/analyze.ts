@@ -6,10 +6,13 @@ import { FINDERS } from "../finders";
 import { runGate } from "../gate/gate";
 import { prescreenFinders } from "../prescreen/prescreen";
 import { runCodeScreen } from "../screen/codeScreen";
+import { preprocessSections, restoreQuotes } from "./preprocess";
 import { checkQuotes } from "./quoteCheck";
 import { mergeDuplicates, rankAndCap } from "./rank";
 
 /**
+ * Step 0: preprocessing corrects spelling, grammar and abbreviations; the finders read the corrected
+ * note, and their quotes are put back into the page's wording afterwards.
  * Step 1: Decisions API pre-screen decides which finders are worth running.
  * Step 2: code screen + finder prompts in parallel.
  * Step 3: quote check, merge, then one gate call per finding in parallel.
@@ -24,7 +27,10 @@ export async function analyzeNote(raw: Section[], setting: CareSetting): Promise
   const errors: BlockError[] = [];
 
   const ruleSuggestions = runCodeScreen(sections, setting);
-  const prescreen = await prescreenFinders(cfg.finders, sections, setting);
+  const pre = await preprocessSections(sections);
+  if (pre.usage) usage.push(pre.usage);
+  if (pre.error) errors.push({ block: "P-CDI-NORMALIZE", message: `${pre.error} (the review read the note as written)` });
+  const prescreen = await prescreenFinders(cfg.finders, pre.sections, setting);
 
   const finderRuns = await Promise.all(
     prescreen.run.map(async (id) => {
@@ -34,7 +40,7 @@ export async function analyzeNote(raw: Section[], setting: CareSetting): Promise
         return [];
       }
       try {
-        const { findings, usage: u } = await finder(sections, setting);
+        const { findings, usage: u } = await finder(pre.sections, setting);
         usage.push(u);
         return findings;
       } catch (err) {
@@ -44,7 +50,12 @@ export async function analyzeNote(raw: Section[], setting: CareSetting): Promise
     }),
   );
 
-  const { kept, dropped } = checkQuotes(finderRuns.flat(), sections);
+  // Quotes must match the page as written, so highlights land; one only the corrected note holds is still kept.
+  const restored = restoreQuotes(finderRuns.flat(), sections, pre.corrections);
+  const onPage = checkQuotes(restored, sections);
+  const corrected = checkQuotes(onPage.dropped.map((d) => d.finding), pre.sections);
+  const kept = [...onPage.kept, ...corrected.kept];
+  const dropped = corrected.dropped;
   const merged = mergeDuplicates(kept);
 
   const gated = await mapLimit(merged, cfg.gate_concurrency, async (finding: Finding): Promise<Suggestion | null> => {

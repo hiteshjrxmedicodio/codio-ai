@@ -8,10 +8,10 @@ INPUT
 You receive the note as labelled sections and the care setting when it is known.
 
 BOUNDARIES
-A clinical thread links what was found, what the provider judged it to mean, and what was done about it. You estimate a probability; a separate reviewer finds and quotes the threads.
+A clinical thread links what was found, what the provider judged it to mean, what caused it, and what was done about it. You estimate a probability; a separate reviewer finds and quotes the threads.
 
 REASONING
-1. Read the note for any finding, judgement or action from this encounter that lacks the link before or after it, and for statements that break off.
+1. Read the note for any finding, judgement or action from this encounter that lacks the link before or after it, any condition in the conclusions with nothing at this encounter managing it or with a cause or relationship the note's evidence shows but the provider never states, any condition only someone other than the provider recorded, and statements that break off.
 2. Discount any thread the note finishes anywhere.
 3. Estimate the probability that at least one unfinished thread remains.
 

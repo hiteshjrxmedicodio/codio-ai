@@ -26,6 +26,14 @@ Judge only from the note in front of you. Do not assume missing information exis
 
 Automated reviewers sometimes describe a problem more strongly than the quotes support. Judge the quotes, not the description.
 
+Many apparent problems are artifacts. Text copied forward from an earlier encounter set beside current text, a working impression that a later statement sharpens, a condition that resolved or was ruled out, a more specific restatement of a general term, and a hedged statement beside a definite one about the same condition are not real problems unless the current documentation still cannot be relied on.
+
+Only the provider's own assertions document a diagnosis. A finding that sets text from the patient, nursing, intake staff, outside records or an automatically pulled list against the provider is real only when the provider's documentation itself is left unclear, inconsistent or unsupported.
+
+A spelling, grammar or abbreviation problem was corrected before review and is never critical here; a finding that rests only on one is not real.
+
+A finding that a documented diagnosis is not adequately supported is real only when the quoted evidence shows the gap it names. When the evidence it needs is present but never tied to the diagnosis by the provider, the problem is in the documentation, not in the diagnosis.
+
 Do not weigh who caused the problem or how the provider might feel about it.
 
 PRECEDENCE

@@ -2,7 +2,7 @@ import { getConfig } from "../../../core/config";
 import { callBlock } from "../../../core/llm/gemini";
 import { decideChoice } from "../../../core/llm/openai";
 import { loadPrompt } from "../../../core/prompts";
-import type { CareSetting, Finding, GateAnswer, GateResult, Section, Usage } from "../../../core/types";
+import type { CareSetting, Finding, GateAnswer, GateResult, Quote, Section, Usage } from "../../../core/types";
 import { CONFIDENCE_SCHEMA, noteText } from "../note";
 
 export const BLOCK_ID = "P-GATE";
@@ -25,15 +25,29 @@ export function quotedSections(finding: Finding, sections: Section[]): Section[]
   return sections.filter((s) => names.has(s.name));
 }
 
+/**
+ * A clinical-validation finding carries its evidence on both sides; the gate and the fix see which
+ * quote is which, so the fix can present both with equal weight instead of leading the provider.
+ */
+function validationSides(finding: Finding): string {
+  if (finding.kind !== "validation") return "";
+  const d = finding.detail as { gap?: string; missingElement?: string; supporting?: Quote[]; against?: Quote[] };
+  const list = (qs: Quote[] | undefined) => (qs?.length ? qs.map((q) => `(section ${q.section}): ${q.text}`).join("\n") : "none in the note");
+  return [`GAP: ${d.gap ?? "unknown"}`, `MISSING ELEMENT: ${d.missingElement ?? ""}`, `EVIDENCE FOR\n${list(d.supporting)}`, `EVIDENCE AGAINST\n${list(d.against)}`].join("\n");
+}
+
 export function findingMessage(finding: Finding, sections: Section[], setting: CareSetting): string {
   const quotes = finding.quotes.map((q, i) => `QUOTE ${i + 1} (section ${q.section}): ${q.text}`).join("\n");
   return [
     `FINDING KIND: ${finding.kind}`,
     `FINDING: ${finding.title}`,
     quotes,
+    validationSides(finding),
     `CARE SETTING: ${setting}`,
     `SECTIONS THE QUOTES COME FROM\n${noteText(quotedSections(finding, sections))}`,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function viaGemini(message: string): Promise<{ gate: GateResult; usage: Usage }> {
